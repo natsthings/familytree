@@ -228,7 +228,7 @@ export default function TreePage() {
               fontWeight: 600,
             }}
           >
-            Family Tree
+            Roots
           </span>
         </div>
 
