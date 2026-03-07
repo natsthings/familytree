@@ -102,27 +102,26 @@ export default function TreePage() {
         id: r.id,
         source: r.source_id,
         target: r.target_id,
-        // Horizontal for spouse/sibling, vertical for parent/child
         sourceHandle: isHorizontal ? 'right' : 'bottom',
         targetHandle: isHorizontal ? 'left' : 'top',
         type: 'smoothstep',
+        pathOptions: { borderRadius: 16 },
         label: r.label ? r.label : isSpouse ? '♥' : '',
         labelStyle: {
-          fill: isSpouse ? '#b06080' : 'var(--parchment-dim)',
+          fill: isSpouse ? '#b06080' : '#b8a882',
           fontFamily: 'Lora, serif',
           fontSize: isSpouse ? 14 : 11,
           fontStyle: 'italic',
         },
-        labelBgStyle: { fill: 'var(--surface)', fillOpacity: 0.85 },
+        labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
         style: {
-          stroke: EDGE_COLORS[r.relation_type] ?? 'var(--gold)',
+          stroke: EDGE_COLORS[r.relation_type] ?? '#c49040',
           strokeWidth: isSpouse ? 2 : 1.5,
           strokeDasharray: isSpouse ? '6 3' : undefined,
         },
-        // Arrow only on parent→child lines
         markerEnd: !isHorizontal ? {
           type: MarkerType.ArrowClosed,
-          color: EDGE_COLORS[r.relation_type] ?? 'var(--gold)',
+          color: EDGE_COLORS[r.relation_type] ?? '#c49040',
           width: 14,
           height: 14,
         } : undefined,
@@ -190,8 +189,8 @@ export default function TreePage() {
         pointerEvents: 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
-          <TreePine size={22} color="var(--gold)" />
-          <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: 'var(--parchment)', fontWeight: 600 }}>
+          <TreePine size={22} color="#c49040" />
+          <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#f5edd8', fontWeight: 600 }}>
             Roots
           </span>
         </div>
@@ -199,7 +198,7 @@ export default function TreePage() {
         {saveStatus !== 'idle' && (
           <div style={{
             pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 6,
-            color: 'var(--parchment-dim)', fontFamily: 'DM Mono, monospace', fontSize: 11, marginRight: 16,
+            color: '#b8a882', fontFamily: 'DM Mono, monospace', fontSize: 11, marginRight: 16,
           }}>
             <Save size={12} />
             {saveStatus === 'saving' ? 'saving…' : '✓ saved'}
@@ -208,15 +207,15 @@ export default function TreePage() {
         <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
           <button onClick={() => setModal({ mode: 'add' })} style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            background: 'var(--gold)', color: '#1a1208', border: 'none', borderRadius: 8,
+            background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8,
             padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>
             <Plus size={14} /> Add member
           </button>
           <button onClick={handleSignOut} style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            background: 'rgba(255,255,255,0.05)', color: 'var(--parchment-dim)',
-            border: '1px solid var(--border)', borderRadius: 8,
+            background: 'rgba(255,255,255,0.05)', color: '#b8a882',
+            border: '1px solid #3a3020', borderRadius: 8,
             padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer',
           }}>
             <LogOut size={13} /> Sign out
@@ -232,12 +231,12 @@ export default function TreePage() {
         }}>
           <p style={{
             fontFamily: 'Playfair Display, serif', fontStyle: 'italic',
-            color: 'var(--parchment-dim)', fontSize: 15, textAlign: 'center', maxWidth: 300, lineHeight: 1.7,
+            color: '#b8a882', fontSize: 15, textAlign: 'center', maxWidth: 300, lineHeight: 1.7,
           }}>
             Your tree begins with you.<br />
             <span style={{ fontSize: 12 }}>
               Double-click your card to edit, or press{' '}
-              <span style={{ color: 'var(--gold)' }}>Add member</span> to grow your family.
+              <span style={{ color: '#c49040' }}>Add member</span> to grow your family.
             </span>
           </p>
         </div>
@@ -258,7 +257,7 @@ export default function TreePage() {
         <MiniMap
           position="bottom-left"
           style={{ bottom: 24, left: 24 }}
-          nodeColor={(n) => (n.data as { member: Member }).member?.is_root ? 'var(--gold)' : '#3a3020'}
+          nodeColor={(n) => (n.data as { member: Member }).member?.is_root ? '#c49040' : '#3a3020'}
           maskColor="rgba(15,12,8,0.8)"
         />
       </ReactFlow>
@@ -266,10 +265,10 @@ export default function TreePage() {
       {/* Legend */}
       <div style={{
         position: 'absolute', top: 70, right: 16, zIndex: 10,
-        background: 'rgba(28,22,16,0.9)', border: '1px solid var(--border)',
+        background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020',
         borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(8px)',
       }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: 'var(--parchment-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
           Legend
         </div>
         {[
@@ -282,13 +281,13 @@ export default function TreePage() {
             <svg width={28} height={8}>
               <line x1={0} y1={4} x2={28} y2={4} stroke={color} strokeWidth={1.5} strokeDasharray={dash ? '5 3' : undefined} />
             </svg>
-            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: 'var(--parchment-dim)' }}>{label}</span>
+            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>{label}</span>
           </div>
         ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, paddingTop: 6, borderTop: '1px solid #3a3020' }}>
           <span style={{ fontSize: 10 }}>💡</span>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: 'var(--parchment-dim)', fontStyle: 'italic' }}>
-            Double-click a card to edit
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>
+            Double-click a card to edit / delete
           </span>
         </div>
       </div>
