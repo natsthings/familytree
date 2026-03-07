@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Family Tree',
+  title: 'Roots',
   description: 'Your interactive family history',
 }
 
