@@ -16,7 +16,6 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
 
   return (
     <div
-      className="member-node"
       style={{
         background: member.is_root
           ? 'linear-gradient(135deg, #3a2c10 0%, #2c1f0e 100%)'
@@ -38,58 +37,40 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           : '0 2px 8px rgba(0,0,0,0.4)',
         transition: 'all 0.2s ease',
         opacity: isDeceased ? 0.75 : 1,
+        position: 'relative',
       }}
       onDoubleClick={() => onEdit(member)}
     >
-      {/* Handles for connecting */}
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+      {/* Named handles on all 4 sides */}
+      <Handle id="top"    type="target" position={Position.Top}    style={{ opacity: 0, top: 0 }} />
+      <Handle id="bottom" type="source" position={Position.Bottom} style={{ opacity: 0, bottom: 0 }} />
+      <Handle id="left"   type="target" position={Position.Left}   style={{ opacity: 0, left: 0 }} />
+      <Handle id="right"  type="source" position={Position.Right}  style={{ opacity: 0, right: 0 }} />
 
-      {/* Content */}
-      <div className="text-center">
-        {/* Avatar placeholder */}
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            background: member.is_root
-              ? 'linear-gradient(135deg, var(--gold), #8a6020)'
-              : 'linear-gradient(135deg, #3a3020, #252015)',
-            border: `2px solid ${member.is_root ? 'var(--gold)' : 'var(--border)'}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 8px',
-            fontSize: 20,
-          }}
-        >
+      <div style={{ textAlign: 'center' }}>
+        {/* Avatar */}
+        <div style={{
+          width: 44, height: 44, borderRadius: '50%',
+          background: member.is_root
+            ? 'linear-gradient(135deg, var(--gold), #8a6020)'
+            : 'linear-gradient(135deg, #3a3020, #252015)',
+          border: `2px solid ${member.is_root ? 'var(--gold)' : 'var(--border)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 8px', fontSize: 20,
+        }}>
           {member.is_root ? '★' : '○'}
         </div>
 
-        <div
-          style={{
-            fontFamily: 'Playfair Display, serif',
-            fontSize: '13px',
-            fontWeight: 600,
-            color: member.is_root ? 'var(--gold-bright)' : 'var(--parchment)',
-            lineHeight: 1.3,
-            marginBottom: 3,
-          }}
-        >
+        <div style={{
+          fontFamily: 'Playfair Display, serif', fontSize: '13px', fontWeight: 600,
+          color: member.is_root ? 'var(--gold-bright)' : 'var(--parchment)',
+          lineHeight: 1.3, marginBottom: 3,
+        }}>
           {member.name}
         </div>
 
         {(member.birth_year || member.death_year) && (
-          <div
-            style={{
-              fontFamily: 'DM Mono, monospace',
-              fontSize: '10px',
-              color: 'var(--parchment-dim)',
-            }}
-          >
+          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: 'var(--parchment-dim)' }}>
             {member.birth_year && member.birth_year}
             {member.birth_year && member.death_year && ' – '}
             {member.death_year && member.death_year}
@@ -107,23 +88,12 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
       <button
         onClick={(e) => { e.stopPropagation(); onConnect(member) }}
         style={{
-          position: 'absolute',
-          bottom: -10,
-          right: -10,
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          background: 'var(--gold)',
-          border: '2px solid var(--bg)',
-          color: 'var(--bark-900)',
-          fontSize: 12,
-          fontWeight: 700,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          lineHeight: 1,
-          zIndex: 10,
+          position: 'absolute', bottom: -10, right: -10,
+          width: 20, height: 20, borderRadius: '50%',
+          background: 'var(--gold)', border: '2px solid var(--bg)',
+          color: '#1a1208', fontSize: 12, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', lineHeight: 1, zIndex: 10,
         }}
         title="Add relative"
       >
