@@ -3,7 +3,7 @@
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { Member } from '@/lib/types'
-
+ 
 interface MemberNodeData {
   member: Member
   onEdit: (member: Member) => void
