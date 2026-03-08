@@ -133,6 +133,7 @@ export default function TreePage() {
         sourceHandle,
         targetHandle,
         type: 'smoothstep',
+        className: `edge-${r.relation_type}`,
         label: r.label ? r.label : isSpouse ? '♥' : '',
         labelStyle: {
           fill: isSpouse ? '#b06080' : '#b8a882',
