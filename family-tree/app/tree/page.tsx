@@ -190,6 +190,19 @@ export default function TreePage() {
   )
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    const removals = changes.filter((c) => c.type === 'remove')
+    if (removals.length > 0) {
+      const supabase = createClient()
+      const ids = removals.map((c) => c.id)
+      // Remove from local relationships state so loadData() won't restore them
+      setRelationships((prev) => prev.filter((r) => !ids.includes(r.id)))
+      // Delete from Supabase
+      ids.forEach((id) => {
+        supabase.from('relationships').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('Failed to delete relationship:', error)
+        })
+      })
+    }
     setLocalEdges((eds) => applyEdgeChanges(changes, eds))
   }, [])
 
@@ -213,9 +226,14 @@ export default function TreePage() {
     router.replace('/login')
   }
 
-  function handleModalSaved() {
+  function handleModalSaved(deletedMemberId?: string) {
     setModal(null)
     setPendingConnect(null)
+    if (deletedMemberId) {
+      // Optimistically remove from state immediately so it doesn't flicker back
+      setMembers(prev => prev.filter(m => m.id !== deletedMemberId))
+      setRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
+    }
     loadData()
   }
 
@@ -355,7 +373,7 @@ export default function TreePage() {
           sourceForConnect={modal.sourceForConnect}
           userId={userId}
           onClose={() => { setModal(null); setPendingConnect(null) }}
-          onSaved={handleModalSaved}
+          onSaved={(deletedId) => handleModalSaved(deletedId)}
           pendingTargetId={pendingConnect?.targetId}
         />
       )}
