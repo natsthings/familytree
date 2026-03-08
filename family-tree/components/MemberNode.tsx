@@ -3,11 +3,21 @@
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { Member } from '@/lib/types'
- 
+
 interface MemberNodeData {
   member: Member
   onEdit: (member: Member) => void
   onConnect: (member: Member) => void
+}
+
+const handleStyle = {
+  width: 10,
+  height: 10,
+  borderRadius: '50%',
+  background: '#c49040',
+  border: '2px solid #0f0c08',
+  opacity: 0,
+  transition: 'opacity 0.15s',
 }
 
 function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
@@ -16,6 +26,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
 
   return (
     <div
+      className="member-node-wrap"
       style={{
         background: member.is_root
           ? 'linear-gradient(135deg, #3a2c10 0%, #2c1f0e 100%)'
@@ -31,9 +42,9 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         maxWidth: '200px',
         cursor: 'pointer',
         boxShadow: selected
-          ? '0 0 20px rgba(196, 144, 64, 0.3)'
+          ? '0 0 20px rgba(196,144,64,0.3)'
           : member.is_root
-          ? '0 4px 20px rgba(196, 144, 64, 0.15)'
+          ? '0 4px 20px rgba(196,144,64,0.15)'
           : '0 2px 8px rgba(0,0,0,0.4)',
         transition: 'all 0.2s ease',
         opacity: isDeceased ? 0.75 : 1,
@@ -41,34 +52,15 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
       }}
       onDoubleClick={() => onEdit(member)}
     >
-      {/* Top handle — parents connect INTO here */}
-      <Handle
-        id="top"
-        type="target"
-        position={Position.Top}
-        style={{ background: 'transparent', border: 'none', width: 1, height: 1, top: 0, left: '50%' }}
-      />
-      {/* Bottom handle — children connect FROM here */}
-      <Handle
-        id="bottom"
-        type="source"
-        position={Position.Bottom}
-        style={{ background: 'transparent', border: 'none', width: 1, height: 1, bottom: 0, left: '50%' }}
-      />
-      {/* Left handle — for horizontal connections (sibling/spouse target) */}
-      <Handle
-        id="left"
-        type="target"
-        position={Position.Left}
-        style={{ background: 'transparent', border: 'none', width: 1, height: 1, top: '50%', left: 0 }}
-      />
-      {/* Right handle — for horizontal connections (sibling/spouse source) */}
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        style={{ background: 'transparent', border: 'none', width: 1, height: 1, top: '50%', right: 0 }}
-      />
+      {/* Handles — visible on hover via CSS class */}
+      <Handle id="top"    type="target" position={Position.Top}
+        style={{ ...handleStyle, top: -6, left: '50%', transform: 'translateX(-50%)' }} />
+      <Handle id="bottom" type="source" position={Position.Bottom}
+        style={{ ...handleStyle, bottom: -6, left: '50%', transform: 'translateX(-50%)' }} />
+      <Handle id="left"   type="target" position={Position.Left}
+        style={{ ...handleStyle, left: -6, top: '50%', transform: 'translateY(-50%)' }} />
+      <Handle id="right"  type="source" position={Position.Right}
+        style={{ ...handleStyle, right: -6, top: '50%', transform: 'translateY(-50%)' }} />
 
       <div style={{ textAlign: 'center' }}>
         <div style={{
@@ -84,12 +76,9 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         </div>
 
         <div style={{
-          fontFamily: 'Playfair Display, serif',
-          fontSize: '13px',
-          fontWeight: 600,
+          fontFamily: 'Playfair Display, serif', fontSize: '13px', fontWeight: 600,
           color: member.is_root ? '#e0b060' : '#f5edd8',
-          lineHeight: 1.3,
-          marginBottom: 3,
+          lineHeight: 1.3, marginBottom: 3,
         }}>
           {member.name}
         </div>
