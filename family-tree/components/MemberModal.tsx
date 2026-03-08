@@ -13,7 +13,7 @@ interface MemberModalProps {
   sourceForConnect?: Member | null
   userId: string
   onClose: () => void
-  onSaved: () => void
+  onSaved: (deletedMemberId?: string) => void
   pendingTargetId?: string
 }
 
@@ -152,9 +152,25 @@ export default function MemberModal({
     if (!member) return
     setLoading(true)
     const supabase = createClient()
-    await supabase.from('relationships').delete().or(`source_id.eq.${member.id},target_id.eq.${member.id}`)
-    await supabase.from('members').delete().eq('id', member.id)
-    onSaved()
+    const { error: relError } = await supabase
+      .from('relationships')
+      .delete()
+      .or(`source_id.eq.${member.id},target_id.eq.${member.id}`)
+    if (relError) console.error('Failed to delete relationships:', relError)
+
+    const { error: memberError } = await supabase
+      .from('members')
+      .delete()
+      .eq('id', member.id)
+    if (memberError) {
+      console.error('Failed to delete member:', memberError)
+      setError('Delete failed: ' + memberError.message)
+      setLoading(false)
+      return
+    }
+    // Small delay to ensure Supabase propagates before re-fetch
+    await new Promise(res => setTimeout(res, 300))
+    onSaved(member.id)
   }
 
   const inputStyle = {
