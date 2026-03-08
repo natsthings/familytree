@@ -9,7 +9,11 @@ import ReactFlow, {
   Node,
   Edge,
   NodeChange,
+  EdgeChange,
+  Connection,
   applyNodeChanges,
+  applyEdgeChanges,
+  addEdge,
   BackgroundVariant,
   MarkerType,
 } from 'reactflow'
@@ -34,12 +38,29 @@ function useDebouncedCallback<T extends (...args: Parameters<T>) => void>(fn: T,
 
 const nodeTypes = { memberNode: MemberNode }
 
-const EDGE_COLORS: Record<string, string> = {
-  parent: '#c49040',
-  child: '#c49040',
-  spouse: '#b06080',
-  sibling: '#507090',
-  other: '#607060',
+// Determine edge style from relation type
+function edgeStyle(relType: string) {
+  const isSpouse = relType === 'spouse'
+  const isSibling = relType === 'sibling'
+  const isHorizontal = isSpouse || isSibling
+  const color = relType === 'spouse' ? '#b06080'
+    : relType === 'sibling' ? '#507090'
+    : relType === 'other' ? '#607060'
+    : '#c49040'
+
+  return {
+    isHorizontal,
+    isSpouse,
+    color,
+    sourceHandle: isHorizontal ? 'right' : 'bottom',
+    targetHandle: isHorizontal ? 'left' : 'top',
+  }
+}
+
+// Pending drag-connect state
+interface PendingConnect {
+  sourceId: string
+  sourceHandle: string
 }
 
 export default function TreePage() {
@@ -48,13 +69,21 @@ export default function TreePage() {
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
+  const [localEdges, setLocalEdges] = useState<Edge[]>([])
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
+  // Modal state
   const [modal, setModal] = useState<{
     mode: 'add' | 'edit' | 'connect'
     member?: Member
     sourceForConnect?: Member
+  } | null>(null)
+
+  // When user drags a new connection — ask them what relationship it is
+  const [pendingConnect, setPendingConnect] = useState<{
+    sourceId: string
+    targetId: string
   } | null>(null)
 
   useEffect(() => {
@@ -93,19 +122,17 @@ export default function TreePage() {
     setNodes(newNodes)
   }, [members])
 
-  const edges: Edge[] = useMemo(() => {
+  // Build edges
+  const builtEdges: Edge[] = useMemo(() => {
     return relationships.map((r) => {
-      const isHorizontal = r.relation_type === 'spouse' || r.relation_type === 'sibling'
-      const isSpouse = r.relation_type === 'spouse'
-
+      const { isHorizontal, isSpouse, color, sourceHandle, targetHandle } = edgeStyle(r.relation_type)
       return {
         id: r.id,
         source: r.source_id,
         target: r.target_id,
-        sourceHandle: isHorizontal ? 'right' : 'bottom',
-        targetHandle: isHorizontal ? 'left' : 'top',
+        sourceHandle,
+        targetHandle,
         type: 'smoothstep',
-        pathOptions: { borderRadius: 16 },
         label: r.label ? r.label : isSpouse ? '♥' : '',
         labelStyle: {
           fill: isSpouse ? '#b06080' : '#b8a882',
@@ -115,13 +142,13 @@ export default function TreePage() {
         },
         labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
         style: {
-          stroke: EDGE_COLORS[r.relation_type] ?? '#c49040',
+          stroke: color,
           strokeWidth: isSpouse ? 2 : 1.5,
           strokeDasharray: isSpouse ? '6 3' : undefined,
         },
         markerEnd: !isHorizontal ? {
           type: MarkerType.ArrowClosed,
-          color: EDGE_COLORS[r.relation_type] ?? '#c49040',
+          color,
           width: 14,
           height: 14,
         } : undefined,
@@ -129,6 +156,8 @@ export default function TreePage() {
       }
     })
   }, [relationships])
+
+  useEffect(() => { setLocalEdges(builtEdges) }, [builtEdges])
 
   const savePositions = useDebouncedCallback(
     async (updatedNodes: Node[]) => {
@@ -159,6 +188,24 @@ export default function TreePage() {
     [savePositions]
   )
 
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setLocalEdges((eds) => applyEdgeChanges(changes, eds))
+  }, [])
+
+  // Called when user drags a new connection between two nodes
+  const onConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target) return
+    // Open the connect modal to set relationship type, pre-filled with source
+    const sourceMember = members.find(m => m.id === connection.source)
+    if (sourceMember) {
+      setPendingConnect({ sourceId: connection.source, targetId: connection.target })
+      setModal({ mode: 'connect', sourceForConnect: sourceMember })
+    }
+  }, [members])
+
+  // After modal saves in pending-connect mode, we don't need extra logic
+  // because loadData() refreshes everything
+
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -167,6 +214,7 @@ export default function TreePage() {
 
   function handleModalSaved() {
     setModal(null)
+    setPendingConnect(null)
     loadData()
   }
 
@@ -235,8 +283,7 @@ export default function TreePage() {
           }}>
             Your tree begins with you.<br />
             <span style={{ fontSize: 12 }}>
-              Double-click your card to edit, or press{' '}
-              <span style={{ color: '#c49040' }}>Add member</span> to grow your family.
+              Double-click your card to edit, or drag from a dot to connect two people.
             </span>
           </p>
         </div>
@@ -244,13 +291,17 @@ export default function TreePage() {
 
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={localEdges}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
+        connectionLineStyle={{ stroke: '#c49040', strokeWidth: 1.5 }}
+        connectionLineType={'smoothstep' as any}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(196,144,64,0.15)" />
         <Controls position="bottom-right" style={{ bottom: 24, right: 24 }} />
@@ -262,32 +313,56 @@ export default function TreePage() {
         />
       </ReactFlow>
 
-      {/* Legend */}
+      {/* Legend — matches actual edge styles */}
       <div style={{
         position: 'absolute', top: 70, right: 16, zIndex: 10,
         background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020',
         borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(8px)',
+        minWidth: 160,
       }}>
         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
           Legend
         </div>
-        {[
-          { color: '#c49040', label: 'Parent → Child', dash: false },
-          { color: '#b06080', label: 'Spouse', dash: true },
-          { color: '#507090', label: 'Sibling', dash: false },
-          { color: '#607060', label: 'Other', dash: false },
-        ].map(({ color, label, dash }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-            <svg width={28} height={8}>
-              <line x1={0} y1={4} x2={28} y2={4} stroke={color} strokeWidth={1.5} strokeDasharray={dash ? '5 3' : undefined} />
-            </svg>
-            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>{label}</span>
-          </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, paddingTop: 6, borderTop: '1px solid #3a3020' }}>
-          <span style={{ fontSize: 10 }}>💡</span>
+
+        {/* Parent → Child: gold solid with arrow */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <svg width={32} height={12}>
+            <line x1={0} y1={6} x2={24} y2={6} stroke="#c49040" strokeWidth={1.5} />
+            <polygon points="24,3 32,6 24,9" fill="#c49040" />
+          </svg>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Parent → Child</span>
+        </div>
+
+        {/* Spouse: pink animated dashes */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <svg width={32} height={12}>
+            <line x1={0} y1={6} x2={32} y2={6} stroke="#b06080" strokeWidth={2} strokeDasharray="5 3" />
+          </svg>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Spouse ♥</span>
+        </div>
+
+        {/* Sibling: blue solid */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <svg width={32} height={12}>
+            <line x1={0} y1={6} x2={32} y2={6} stroke="#507090" strokeWidth={1.5} />
+          </svg>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Sibling</span>
+        </div>
+
+        {/* Other: muted green */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <svg width={32} height={12}>
+            <line x1={0} y1={6} x2={32} y2={6} stroke="#607060" strokeWidth={1.5} />
+          </svg>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Other</span>
+        </div>
+
+        <div style={{ borderTop: '1px solid #3a3020', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>
-            Double-click a card to edit / delete
+            💡 Double-click card to edit
+          </span>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>
+            ✦ Drag from a dot to connect
           </span>
         </div>
       </div>
@@ -298,8 +373,9 @@ export default function TreePage() {
           member={modal.member}
           sourceForConnect={modal.sourceForConnect}
           userId={userId}
-          onClose={() => setModal(null)}
+          onClose={() => { setModal(null); setPendingConnect(null) }}
           onSaved={handleModalSaved}
+          pendingTargetId={pendingConnect?.targetId}
         />
       )}
     </div>
