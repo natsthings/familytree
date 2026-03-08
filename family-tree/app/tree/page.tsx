@@ -313,7 +313,7 @@ export default function TreePage() {
         />
       </ReactFlow>
 
-      {/* Legend — matches actual edge styles */}
+      {/* Legend */}
       <div style={{
         position: 'absolute', top: 70, right: 16, zIndex: 10,
         background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020',
@@ -323,47 +323,27 @@ export default function TreePage() {
         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
           Legend
         </div>
-
-        {/* Parent → Child: gold solid with arrow */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <svg width={32} height={12}>
-            <line x1={0} y1={6} x2={24} y2={6} stroke="#c49040" strokeWidth={1.5} />
-            <polygon points="24,3 32,6 24,9" fill="#c49040" />
-          </svg>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Parent → Child</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#c49040', fontSize: 16, lineHeight: 1 }}>→</span>
+            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#c49040' }}>Parent → Child</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#b06080', fontSize: 14, lineHeight: 1 }}>♥</span>
+            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b06080' }}>Spouse</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#507090', fontSize: 16, lineHeight: 1 }}>—</span>
+            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#507090' }}>Sibling</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#607060', fontSize: 16, lineHeight: 1 }}>—</span>
+            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#607060' }}>Other</span>
+          </div>
         </div>
-
-        {/* Spouse: pink animated dashes */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <svg width={32} height={12}>
-            <line x1={0} y1={6} x2={32} y2={6} stroke="#b06080" strokeWidth={2} strokeDasharray="5 3" />
-          </svg>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Spouse ♥</span>
-        </div>
-
-        {/* Sibling: blue solid */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <svg width={32} height={12}>
-            <line x1={0} y1={6} x2={32} y2={6} stroke="#507090" strokeWidth={1.5} />
-          </svg>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Sibling</span>
-        </div>
-
-        {/* Other: muted green */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <svg width={32} height={12}>
-            <line x1={0} y1={6} x2={32} y2={6} stroke="#607060" strokeWidth={1.5} />
-          </svg>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882' }}>Other</span>
-        </div>
-
         <div style={{ borderTop: '1px solid #3a3020', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>
-            💡 Double-click card to edit
-          </span>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>
-            ✦ Drag from a dot to connect
-          </span>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>💡 Double-click card to edit</span>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>✦ Drag from a dot to connect</span>
         </div>
       </div>
 
