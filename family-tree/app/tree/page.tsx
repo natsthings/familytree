@@ -230,11 +230,13 @@ export default function TreePage() {
     setModal(null)
     setPendingConnect(null)
     if (deletedMemberId) {
-      // Optimistically remove from state immediately so it doesn't flicker back
+      // Remove from state directly — do NOT reload from DB as it may return stale data
       setMembers(prev => prev.filter(m => m.id !== deletedMemberId))
       setRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
+    } else {
+      // For adds/edits/connects, reload normally
+      loadData()
     }
-    loadData()
   }
 
   if (loading) {
