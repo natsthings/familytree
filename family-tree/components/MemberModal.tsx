@@ -32,8 +32,8 @@ export default function MemberModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState(member?.name ?? '')
-  const [birthYear, setBirthYear] = useState(member?.birth_year?.toString() ?? '')
-  const [deathYear, setDeathYear] = useState(member?.death_year?.toString() ?? '')
+  const [birthDate, setBirthDate] = useState(member?.birth_date ?? (member?.birth_year ? `${member.birth_year}-01-01` : ''))
+  const [deathDate, setDeathDate] = useState(member?.death_date ?? (member?.death_year ? `${member.death_year}-01-01` : ''))
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -97,16 +97,20 @@ export default function MemberModal({
       if (mode === 'edit' && member) {
         const { error } = await supabase.from('members').update({
           name, photo_url: photoUrl || null,
-          birth_year: birthYear ? parseInt(birthYear) : null,
-          death_year: deathYear ? parseInt(deathYear) : null,
+          birth_date: birthDate || null,
+          death_date: deathDate || null,
+          birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
+          death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
           social_links: socialLinks.filter(l => l.url.trim()),
         }).eq('id', member.id)
         if (error) throw error
       } else if (mode === 'add') {
         const { error } = await supabase.from('members').insert({
           user_id: userId, name, photo_url: photoUrl || null,
-          birth_year: birthYear ? parseInt(birthYear) : null,
-          death_year: deathYear ? parseInt(deathYear) : null,
+          birth_date: birthDate || null,
+          death_date: deathDate || null,
+          birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
+          death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
           social_links: socialLinks.filter(l => l.url.trim()),
           is_root: false,
           position_x: Math.random() * 400 - 200,
@@ -118,8 +122,10 @@ export default function MemberModal({
         if (connectTo === 'new') {
           const { data: newMember, error: memberError } = await supabase.from('members').insert({
             user_id: userId, name, photo_url: photoUrl || null,
-            birth_year: birthYear ? parseInt(birthYear) : null,
-            death_year: deathYear ? parseInt(deathYear) : null,
+            birth_date: birthDate || null,
+            death_date: deathDate || null,
+            birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
+            death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
             social_links: [],
             is_root: false,
             position_x: (sourceForConnect?.position_x ?? 0) + (Math.random() * 200 - 100),
@@ -278,16 +284,17 @@ export default function MemberModal({
             </div>
           )}
 
-          {/* Years */}
           {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div>
                 <label style={labelStyle}>Born</label>
-                <input type="number" value={birthYear} onChange={e => setBirthYear(e.target.value)} style={inputStyle} placeholder="1950" />
+                <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)}
+                  style={inputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>Died</label>
-                <input type="number" value={deathYear} onChange={e => setDeathYear(e.target.value)} style={inputStyle} placeholder="optional" />
+                <input type="date" value={deathDate} onChange={e => setDeathDate(e.target.value)}
+                  style={inputStyle} />
               </div>
             </div>
           )}
