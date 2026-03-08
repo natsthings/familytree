@@ -9,8 +9,15 @@ export interface Member {
   is_root: boolean
   position_x: number
   position_y: number
+  social_links: SocialLink[] | null
   created_at: string
   updated_at: string
+}
+
+export interface SocialLink {
+  type: 'facebook' | 'instagram' | 'obituary' | 'website' | 'other'
+  label: string
+  url: string
 }
 
 export interface Relationship {
@@ -31,4 +38,19 @@ export const RELATION_LABELS: Record<RelationType, string> = {
   spouse: 'Spouse / Partner',
   sibling: 'Sibling',
   other: 'Other',
+}
+
+export interface ScrapbookItem {
+  id: string
+  member_id: string
+  user_id: string
+  type: 'photo' | 'text'
+  content: string
+  caption: string | null
+  date_taken: string | null
+  pos_x: number
+  pos_y: number
+  width: number
+  rotation: number
+  created_at: string
 }
