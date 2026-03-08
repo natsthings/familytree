@@ -3,7 +3,9 @@ export interface Member {
   user_id: string
   name: string
   birth_year: number | null
+  birth_date: string | null
   death_year: number | null
+  death_date: string | null
   notes: string | null
   photo_url: string | null
   is_root: boolean
