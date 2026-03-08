@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Trash2, Plus, ExternalLink, Upload } from 'lucide-react'
 import { Member, SocialLink, RELATION_LABELS, RelationType } from '@/lib/types'
 import { createClient } from '@/lib/supabase'
+import { uploadToCloudinary } from '@/lib/cloudinary'
 import { useRouter } from 'next/navigation'
 
 interface MemberModalProps {
@@ -67,16 +68,9 @@ export default function MemberModal({
     if (!file) return
     setUploadingPhoto(true)
     try {
-      const supabase = createClient()
-      const ext = file.name.split('.').pop()
-      const path = `${userId}/${member?.id ?? 'new'}-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('member-photos')
-        .upload(path, file, { upsert: true })
-      if (uploadError) throw uploadError
-      const { data } = supabase.storage.from('member-photos').getPublicUrl(path)
-      setPhotoUrl(data.publicUrl)
-      setPhotoPreview(data.publicUrl)
+      const url = await uploadToCloudinary(file, `roots/${userId}/profiles`)
+      setPhotoUrl(url)
+      setPhotoPreview(url)
     } catch (err: any) {
       setError('Photo upload failed: ' + err.message)
     } finally {
