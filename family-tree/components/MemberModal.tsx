@@ -153,29 +153,12 @@ export default function MemberModal({
     setLoading(true)
     setError('')
     const supabase = createClient()
-
-    const { error: relError } = await supabase
-      .from('relationships')
-      .delete()
-      .or(`source_id.eq.${member.id},target_id.eq.${member.id}`)
-    if (relError) {
-      setError('Failed to delete connections: ' + relError.message + ' (code: ' + relError.code + ')')
+    const { error } = await supabase.rpc('delete_member', { member_id: member.id })
+    if (error) {
+      setError('Delete failed: ' + error.message)
       setLoading(false)
       return
     }
-
-    const { error: memberError, count } = await supabase
-      .from('members')
-      .delete()
-      .eq('id', member.id)
-      .select()
-    if (memberError) {
-      setError('Failed to delete person: ' + memberError.message + ' (code: ' + memberError.code + ')')
-      setLoading(false)
-      return
-    }
-
-    await new Promise(res => setTimeout(res, 300))
     onSaved(member.id)
   }
 
