@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { X, Trash2 } from 'lucide-react'
-import { Member, RELATION_LABELS, RelationType } from '@/lib/types'
+import { useState, useEffect, useRef } from 'react'
+import { X, Trash2, Plus, ExternalLink, Upload } from 'lucide-react'
+import { Member, SocialLink, RELATION_LABELS, RelationType } from '@/lib/types'
 import { createClient } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 interface MemberModalProps {
   mode: 'add' | 'edit' | 'connect'
@@ -12,23 +13,37 @@ interface MemberModalProps {
   userId: string
   onClose: () => void
   onSaved: () => void
-  pendingTargetId?: string // pre-filled when user dragged a connection
+  pendingTargetId?: string
 }
+
+const SOCIAL_TYPES = [
+  { value: 'facebook', label: 'Facebook', icon: '📘' },
+  { value: 'instagram', label: 'Instagram', icon: '📷' },
+  { value: 'obituary', label: 'Obituary', icon: '🕯️' },
+  { value: 'website', label: 'Website', icon: '🌐' },
+  { value: 'other', label: 'Other', icon: '🔗' },
+]
 
 export default function MemberModal({
   mode, member, sourceForConnect, userId, onClose, onSaved, pendingTargetId,
 }: MemberModalProps) {
+  const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [name, setName] = useState(member?.name ?? '')
   const [birthYear, setBirthYear] = useState(member?.birth_year?.toString() ?? '')
   const [deathYear, setDeathYear] = useState(member?.death_year?.toString() ?? '')
-  const [notes, setNotes] = useState(member?.notes ?? '')
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
+  const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
+  const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
   const [relationType, setRelationType] = useState<RelationType>('parent')
   const [customLabel, setCustomLabel] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // If pendingTargetId is set, we're in drag-connect mode — always "existing"
   const isDragConnect = !!pendingTargetId
   const [connectTo, setConnectTo] = useState<'new' | 'existing'>(isDragConnect ? 'existing' : 'new')
   const [existingMembers, setExistingMembers] = useState<Member[]>([])
@@ -43,67 +58,91 @@ export default function MemberModal({
     }
   }, [mode, userId, sourceForConnect])
 
-  // When pendingTargetId arrives (drag connect), pre-select it
   useEffect(() => {
-    if (pendingTargetId) {
-      setSelectedExistingId(pendingTargetId)
-      setConnectTo('existing')
-    }
+    if (pendingTargetId) { setSelectedExistingId(pendingTargetId); setConnectTo('existing') }
   }, [pendingTargetId])
 
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    try {
+      const supabase = createClient()
+      const ext = file.name.split('.').pop()
+      const path = `${userId}/${member?.id ?? 'new'}-${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('member-photos')
+        .upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from('member-photos').getPublicUrl(path)
+      setPhotoUrl(data.publicUrl)
+      setPhotoPreview(data.publicUrl)
+    } catch (err: any) {
+      setError('Photo upload failed: ' + err.message)
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  function addSocialLink() {
+    setSocialLinks([...socialLinks, { type: 'other', label: '', url: '' }])
+  }
+  function updateSocialLink(i: number, field: keyof SocialLink, value: string) {
+    const updated = [...socialLinks]
+    updated[i] = { ...updated[i], [field]: value }
+    setSocialLinks(updated)
+  }
+  function removeSocialLink(i: number) {
+    setSocialLinks(socialLinks.filter((_, idx) => idx !== i))
+  }
+
   async function handleSave() {
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     const supabase = createClient()
     try {
       if (mode === 'edit' && member) {
         const { error } = await supabase.from('members').update({
-          name,
+          name, photo_url: photoUrl || null,
           birth_year: birthYear ? parseInt(birthYear) : null,
           death_year: deathYear ? parseInt(deathYear) : null,
-          notes: notes || null,
+          social_links: socialLinks.filter(l => l.url.trim()),
         }).eq('id', member.id)
         if (error) throw error
-
       } else if (mode === 'add') {
         const { error } = await supabase.from('members').insert({
-          user_id: userId, name,
+          user_id: userId, name, photo_url: photoUrl || null,
           birth_year: birthYear ? parseInt(birthYear) : null,
           death_year: deathYear ? parseInt(deathYear) : null,
-          notes: notes || null, is_root: false,
+          social_links: socialLinks.filter(l => l.url.trim()),
+          is_root: false,
           position_x: Math.random() * 400 - 200,
           position_y: Math.random() * 400 - 200,
         })
         if (error) throw error
-
       } else if (mode === 'connect') {
         let targetId = selectedExistingId
-
         if (connectTo === 'new') {
           const { data: newMember, error: memberError } = await supabase.from('members').insert({
-            user_id: userId, name,
+            user_id: userId, name, photo_url: photoUrl || null,
             birth_year: birthYear ? parseInt(birthYear) : null,
             death_year: deathYear ? parseInt(deathYear) : null,
-            notes: notes || null, is_root: false,
+            social_links: [],
+            is_root: false,
             position_x: (sourceForConnect?.position_x ?? 0) + (Math.random() * 200 - 100),
             position_y: (sourceForConnect?.position_y ?? 0) + 180,
           }).select().single()
           if (memberError || !newMember) throw memberError
           targetId = newMember.id
         }
-
         const { error: relError } = await supabase.from('relationships').insert({
-          user_id: userId,
-          source_id: sourceForConnect!.id,
-          target_id: targetId,
-          relation_type: relationType,
-          label: customLabel || null,
+          user_id: userId, source_id: sourceForConnect!.id, target_id: targetId,
+          relation_type: relationType, label: customLabel || null,
         })
         if (relError) throw relError
       }
       onSaved()
-    } catch (err: unknown) {
-      setError((err as Error).message ?? 'Something went wrong')
+    } catch (err: any) {
+      setError(err.message ?? 'Something went wrong')
     } finally {
       setLoading(false)
     }
@@ -113,18 +152,10 @@ export default function MemberModal({
     if (!member) return
     setLoading(true)
     const supabase = createClient()
-    await supabase.from('relationships').delete()
-      .or(`source_id.eq.${member.id},target_id.eq.${member.id}`)
+    await supabase.from('relationships').delete().or(`source_id.eq.${member.id},target_id.eq.${member.id}`)
     await supabase.from('members').delete().eq('id', member.id)
     onSaved()
   }
-
-  const title =
-    mode === 'edit' ? `Edit — ${member?.name}`
-    : mode === 'connect' ? isDragConnect
-      ? `Set relationship`
-      : `Add relative to ${sourceForConnect?.name}`
-    : 'Add family member'
 
   const inputStyle = {
     width: '100%', background: '#0f0c08', border: '1px solid #3a3020',
@@ -145,17 +176,13 @@ export default function MemberModal({
         <div style={{ width: '100%', maxWidth: 400, background: '#1c1610', border: '1px solid #3a3020', borderRadius: 16, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: '#f5edd8', marginBottom: 8 }}>
-              Remove {member.name}?
-            </h2>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: '#f5edd8', marginBottom: 8 }}>Remove {member.name}?</h2>
             <p style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#b8a882', lineHeight: 1.6 }}>
               This will permanently delete <strong style={{ color: '#f5edd8' }}>{member.name}</strong> and all their connections. This cannot be undone.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #3a3020', background: 'transparent', color: '#b8a882', fontFamily: 'Lora, serif', fontSize: 14, cursor: 'pointer' }}>
-              Cancel
-            </button>
+            <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #3a3020', background: 'transparent', color: '#b8a882', fontFamily: 'Lora, serif', fontSize: 14, cursor: 'pointer' }}>Cancel</button>
             <button onClick={handleDelete} disabled={loading} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#8b2020', color: '#fff', fontFamily: 'Playfair Display, serif', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.5 : 1 }}>
               {loading ? 'Removing…' : 'Yes, remove'}
             </button>
@@ -165,30 +192,53 @@ export default function MemberModal({
     )
   }
 
+  const title = mode === 'edit' ? `Edit — ${member?.name}` : mode === 'connect' ? isDragConnect ? 'Set relationship' : `Add relative to ${sourceForConnect?.name}` : 'Add family member'
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ width: '100%', maxWidth: 440, background: '#1c1610', border: '1px solid #3a3020', borderRadius: 16, padding: 24, position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
+      <div style={{ width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', background: '#1c1610', border: '1px solid #3a3020', borderRadius: 16, padding: 24, position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', padding: 4 }}>
           <X size={18} />
         </button>
 
-        <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: '#f5edd8', marginBottom: 4 }}>{title}</h2>
-        {isDragConnect && (
-          <p style={{ fontFamily: 'Lora, serif', fontSize: 12, color: '#b8a882', fontStyle: 'italic', marginBottom: 16 }}>
-            Choose the relationship type for this connection.
-          </p>
-        )}
-        {!isDragConnect && <div style={{ marginBottom: 16 }} />}
+        <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: '#f5edd8', marginBottom: 20 }}>{title}</h2>
 
-        {error && (
-          <div style={{ marginBottom: 16, padding: 12, background: 'rgba(139,32,32,0.3)', border: '1px solid rgba(139,32,32,0.5)', borderRadius: 8, color: '#f87171', fontSize: 13, fontFamily: 'Lora, serif' }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ marginBottom: 16, padding: 12, background: 'rgba(139,32,32,0.3)', border: '1px solid rgba(139,32,32,0.5)', borderRadius: 8, color: '#f87171', fontSize: 13, fontFamily: 'Lora, serif' }}>{error}</div>}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Connect mode toggle — hidden when drag-connect */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Profile photo — edit/add mode */}
+          {(mode === 'edit' || (mode === 'connect' && connectTo === 'new') || mode === 'add') && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  width: 72, height: 72, borderRadius: '50%', flexShrink: 0,
+                  background: photoPreview ? 'transparent' : 'linear-gradient(135deg, #3a3020, #252015)',
+                  border: '2px dashed #3a3020', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden', position: 'relative',
+                  transition: 'border-color 0.2s',
+                }}
+              >
+                {photoPreview ? (
+                  <img src={photoPreview} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : uploadingPhoto ? (
+                  <div style={{ width: 20, height: 20, border: '2px solid #c49040', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                ) : (
+                  <Upload size={20} color="#b8a882" />
+                )}
+              </div>
+              <div>
+                <div style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8', marginBottom: 4 }}>Profile photo</div>
+                <div style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882', fontStyle: 'italic' }}>Click to upload. More photos go in the scrapbook.</div>
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
+            </div>
+          )}
+
+          {/* Connect mode toggle */}
           {mode === 'connect' && !isDragConnect && (
             <div style={{ display: 'flex', gap: 8 }}>
               {(['new', 'existing'] as const).map((opt) => (
@@ -206,20 +256,16 @@ export default function MemberModal({
             </div>
           )}
 
-          {/* Show the two connected people when drag-connect */}
+          {/* Drag-connect preview */}
           {isDragConnect && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#0f0c08', borderRadius: 8, border: '1px solid #3a3020' }}>
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8' }}>
-                {sourceForConnect?.name}
-              </span>
+              <span style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8' }}>{sourceForConnect?.name}</span>
               <span style={{ color: '#c49040', fontSize: 16 }}>→</span>
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8' }}>
-                {existingMembers.find(m => m.id === pendingTargetId)?.name ?? '…'}
-              </span>
+              <span style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8' }}>{existingMembers.find(m => m.id === pendingTargetId)?.name ?? '…'}</span>
             </div>
           )}
 
-          {/* Existing member picker — shown when not drag-connect and user picks "existing" */}
+          {/* Existing picker */}
           {mode === 'connect' && connectTo === 'existing' && !isDragConnect && (
             <div>
               <label style={labelStyle}>Select person</label>
@@ -230,8 +276,8 @@ export default function MemberModal({
             </div>
           )}
 
-          {/* Name — for new person or add mode */}
-          {(mode === 'add' || (mode === 'edit') || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+          {/* Name */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
             <div>
               <label style={labelStyle}>Full Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Full name" />
@@ -252,7 +298,7 @@ export default function MemberModal({
             </div>
           )}
 
-          {/* Relationship type — for connect mode */}
+          {/* Relation type */}
           {mode === 'connect' && (
             <div>
               <label style={labelStyle}>Relationship type</label>
@@ -263,23 +309,56 @@ export default function MemberModal({
               </select>
             </div>
           )}
-
-          {/* Custom label */}
           {mode === 'connect' && relationType === 'other' && (
             <div>
               <label style={labelStyle}>Custom label</label>
-              <input type="text" value={customLabel} onChange={e => setCustomLabel(e.target.value)} style={inputStyle} placeholder="e.g. Godfather, Cousin once removed…" />
+              <input type="text" value={customLabel} onChange={e => setCustomLabel(e.target.value)} style={inputStyle} placeholder="e.g. Godfather…" />
             </div>
           )}
 
-          {/* Notes */}
-          {(mode === 'add' || mode === 'edit') && (
+          {/* Social links — edit mode */}
+          {(mode === 'edit' || mode === 'add') && (
             <div>
-              <label style={labelStyle}>Notes</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-                style={{ ...inputStyle, resize: 'none' as const }}
-                placeholder="Hometown, occupation, stories…" />
+              <label style={labelStyle}>Links</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {socialLinks.map((link, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <select value={link.type} onChange={e => updateSocialLink(i, 'type', e.target.value)}
+                      style={{ ...inputStyle, width: 'auto', padding: '8px 10px', fontSize: 12 }}>
+                      {SOCIAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
+                    </select>
+                    <input type="url" value={link.url} onChange={e => updateSocialLink(i, 'url', e.target.value)}
+                      style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="https://…" />
+                    <button onClick={() => removeSocialLink(i)} style={{ background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                <button onClick={addSocialLink} style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+                  background: 'transparent', border: '1px dashed #3a3020', borderRadius: 8,
+                  color: '#b8a882', fontFamily: 'Lora, serif', fontSize: 12, cursor: 'pointer',
+                }}>
+                  <Plus size={12} /> Add link (Facebook, obituary, website…)
+                </button>
+              </div>
             </div>
+          )}
+
+          {/* Open scrapbook button — edit mode only */}
+          {mode === 'edit' && member && (
+            <button
+              onClick={() => { onClose(); router.push(`/scrapbook/${member.id}`) }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '10px', borderRadius: 8,
+                border: '1px solid #c49040', background: 'rgba(196,144,64,0.08)',
+                color: '#c49040', fontFamily: 'Playfair Display, serif',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              📖 Open Scrapbook
+            </button>
           )}
         </div>
 
@@ -287,12 +366,9 @@ export default function MemberModal({
         <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
           {mode === 'edit' && member && !member.is_root && (
             <button onClick={() => setShowDeleteConfirm(true)} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 12px', borderRadius: 8,
-              border: '1px solid rgba(139,32,32,0.5)',
-              background: 'rgba(139,32,32,0.15)',
-              color: '#f87171', cursor: 'pointer',
-              fontFamily: 'Lora, serif', fontSize: 13,
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8,
+              border: '1px solid rgba(139,32,32,0.5)', background: 'rgba(139,32,32,0.15)',
+              color: '#f87171', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13,
             }}>
               <Trash2 size={14} /> Remove
             </button>
