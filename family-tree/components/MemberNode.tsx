@@ -11,13 +11,9 @@ interface MemberNodeData {
 }
 
 const handleStyle = {
-  width: 10,
-  height: 10,
-  borderRadius: '50%',
-  background: '#c49040',
-  border: '2px solid #0f0c08',
-  opacity: 0,
-  transition: 'opacity 0.15s',
+  width: 10, height: 10, borderRadius: '50%',
+  background: '#c49040', border: '2px solid #0f0c08',
+  opacity: 0, transition: 'opacity 0.15s',
 }
 
 function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
@@ -33,9 +29,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           : 'linear-gradient(135deg, #1e1a12 0%, #16120c 100%)',
         border: selected
           ? '2px solid #e0b060'
-          : member.is_root
-          ? '2px solid #c49040'
-          : '1px solid #3a3020',
+          : member.is_root ? '2px solid #c49040' : '1px solid #3a3020',
         borderRadius: '12px',
         padding: '12px 16px',
         minWidth: '160px',
@@ -43,36 +37,41 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         cursor: 'pointer',
         boxShadow: selected
           ? '0 0 20px rgba(196,144,64,0.3)'
-          : member.is_root
-          ? '0 4px 20px rgba(196,144,64,0.15)'
-          : '0 2px 8px rgba(0,0,0,0.4)',
+          : member.is_root ? '0 4px 20px rgba(196,144,64,0.15)' : '0 2px 8px rgba(0,0,0,0.4)',
         transition: 'all 0.2s ease',
-        opacity: isDeceased ? 0.75 : 1,
+        opacity: isDeceased ? 0.8 : 1,
         position: 'relative',
       }}
       onDoubleClick={() => onEdit(member)}
     >
-      {/* Handles — visible on hover via CSS class */}
-      <Handle id="top"    type="target" position={Position.Top}
+      <Handle id="top" type="target" position={Position.Top}
         style={{ ...handleStyle, top: -6, left: '50%', transform: 'translateX(-50%)' }} />
       <Handle id="bottom" type="source" position={Position.Bottom}
         style={{ ...handleStyle, bottom: -6, left: '50%', transform: 'translateX(-50%)' }} />
-      <Handle id="left"   type="target" position={Position.Left}
+      <Handle id="left" type="target" position={Position.Left}
         style={{ ...handleStyle, left: -6, top: '50%', transform: 'translateY(-50%)' }} />
-      <Handle id="right"  type="source" position={Position.Right}
+      <Handle id="right" type="source" position={Position.Right}
         style={{ ...handleStyle, right: -6, top: '50%', transform: 'translateY(-50%)' }} />
 
       <div style={{ textAlign: 'center' }}>
+        {/* Avatar — photo or placeholder */}
         <div style={{
-          width: 44, height: 44, borderRadius: '50%',
+          width: 48, height: 48, borderRadius: '50%',
           background: member.is_root
             ? 'linear-gradient(135deg, #c49040, #8a6020)'
             : 'linear-gradient(135deg, #3a3020, #252015)',
           border: `2px solid ${member.is_root ? '#c49040' : '#3a3020'}`,
+          margin: '0 auto 8px',
+          overflow: 'hidden',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 8px', fontSize: 20,
+          fontSize: 20, flexShrink: 0,
         }}>
-          {member.is_root ? '★' : '○'}
+          {member.photo_url ? (
+            <img src={member.photo_url} alt={member.name}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span>{member.is_root ? '★' : '○'}</span>
+          )}
         </div>
 
         <div style={{
@@ -94,9 +93,19 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
             † deceased
           </div>
         )}
+
+        {/* Social link indicators */}
+        {member.social_links && member.social_links.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 3, marginTop: 5, flexWrap: 'wrap' }}>
+            {member.social_links.slice(0, 4).map((link, i) => (
+              <span key={i} style={{ fontSize: 9, opacity: 0.7 }}>
+                {link.type === 'facebook' ? '📘' : link.type === 'instagram' ? '📷' : link.type === 'obituary' ? '🕯️' : '🔗'}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Quick-connect button */}
       <button
         onClick={(e) => { e.stopPropagation(); onConnect(member) }}
         style={{
