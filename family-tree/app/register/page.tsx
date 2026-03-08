@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Member, ScrapbookItem, SocialLink } from '@/lib/types'
+import { uploadToCloudinary } from '@/lib/cloudinary'
 import { ArrowLeft, Plus, Type, Image as ImageIcon, X, ExternalLink, Check } from 'lucide-react'
 
 const SOCIAL_ICONS: Record<string, string> = {
@@ -225,23 +226,23 @@ export default function ScrapbookPage() {
     const file = e.target.files?.[0]
     if (!file || !userId) return
     setUploading(true)
-    const supabase = createClient()
-    const ext = file.name.split('.').pop()
-    const path = `${userId}/scrapbook/${memberId}-${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from('member-photos').upload(path, file)
-    if (!uploadError) {
-      const { data: urlData } = supabase.storage.from('member-photos').getPublicUrl(path)
-      const { data, error: insertError } = await supabase.from('scrapbook_items').insert({
+    try {
+      const url = await uploadToCloudinary(file, `roots/${userId}/scrapbook/${memberId}`)
+      const supabase = createClient()
+      const { data } = await supabase.from('scrapbook_items').insert({
         member_id: memberId, user_id: userId,
-        type: 'photo', content: urlData.publicUrl,
+        type: 'photo', content: url,
         pos_x: 100 + Math.random() * 300, pos_y: 80 + Math.random() * 200,
         width: 200 + Math.random() * 80, rotation: (Math.random() - 0.5) * 6,
         caption: null, date_taken: null,
       }).select().single()
       if (data) { setItems(prev => [...prev, data]); setSelectedId(data.id) }
+    } catch (err: any) {
+      console.error('Upload failed:', err.message)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
     }
-    setUploading(false)
-    e.target.value = ''
   }
 
   if (loading) {
