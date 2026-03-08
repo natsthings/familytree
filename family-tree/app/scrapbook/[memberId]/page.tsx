@@ -193,12 +193,14 @@ export default function TreePage() {
     const removals = changes.filter((c) => c.type === 'remove')
     if (removals.length > 0) {
       const supabase = createClient()
-      removals.forEach((c) => {
-        if (c.type === 'remove') {
-          supabase.from('relationships').delete().eq('id', c.id).then(({ error }) => {
-            if (error) console.error('Failed to delete relationship:', error)
-          })
-        }
+      const ids = removals.map((c) => c.id)
+      // Remove from local relationships state so loadData() won't restore them
+      setRelationships((prev) => prev.filter((r) => !ids.includes(r.id)))
+      // Delete from Supabase
+      ids.forEach((id) => {
+        supabase.from('relationships').delete().eq('id', id).then(({ error }) => {
+          if (error) console.error('Failed to delete relationship:', error)
+        })
       })
     }
     setLocalEdges((eds) => applyEdgeChanges(changes, eds))
