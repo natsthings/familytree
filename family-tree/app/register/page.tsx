@@ -113,7 +113,7 @@ export default function RegisterPage() {
         <div className="text-center mb-10">
           <div className="text-5xl mb-4">🌳</div>
           <h1 className="font-display text-4xl text-[var(--parchment)] mb-2">Roots</h1>
-          <p className="text-[var(--parchment-dim)] font-body italic text-sm">Join the family tree</p>
+          <p className="text-[var(--parchment-dim)] font-body italic text-sm">Join the family tree (write down the password somewhere safe, I can't access it)</p>
         </div>
 
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8">
