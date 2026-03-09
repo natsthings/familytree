@@ -95,3 +95,7 @@ That's it! Vercel auto-deploys on every push to main.
 | Tree Canvas | React Flow |
 | Styling | Tailwind CSS |
 | Hosting | Vercel |
+
+
+my user: nataliabern2007nb@gmail.com
+my password: 5223987C
