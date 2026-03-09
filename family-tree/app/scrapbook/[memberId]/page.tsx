@@ -184,18 +184,21 @@ export default function ScrapbookPage() {
     })
   }, [userId, memberId])
 
-  // Debounced save of item positions/content
+  // Debounced save of item positions/content — uses RPC so any family member can save
   function scheduleItemSave(updatedItems: ScrapbookItem[]) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setSaving(true)
     saveTimer.current = setTimeout(async () => {
       const supabase = createClient()
       await Promise.all(updatedItems.map(item =>
-        supabase.from('scrapbook_items').update({
-          pos_x: item.pos_x, pos_y: item.pos_y,
-          content: item.content, caption: item.caption,
-          date_taken: item.date_taken,
-        }).eq('id', item.id)
+        supabase.rpc('update_scrapbook_item', {
+          item_id: item.id,
+          new_pos_x: item.pos_x,
+          new_pos_y: item.pos_y,
+          new_content: item.content,
+          new_caption: item.caption ?? null,
+          new_date_taken: item.date_taken ?? null,
+        })
       ))
       setSaving(false)
     }, 1000)
@@ -210,10 +213,26 @@ export default function ScrapbookPage() {
   }
 
   async function deleteItem(id: string) {
-    setItems(prev => prev.filter(i => i.id !== id))
     const supabase = createClient()
-    await supabase.from('scrapbook_items').delete().eq('id', id)
-    setSelectedId(null)
+    const { data: { session } } = await supabase.auth.getSession()
+    const isAdmin = session?.user?.email?.toLowerCase() === 'nataliabern2007nb@gmail.com'
+    if (isAdmin) {
+      setItems(prev => prev.filter(i => i.id !== id))
+      await supabase.from('scrapbook_items').delete().eq('id', id)
+      setSelectedId(null)
+    } else {
+      // Non-admin: send delete request instead
+      const item = items.find(i => i.id === id)
+      await supabase.from('delete_requests').insert({
+        requester_id: userId,
+        requester_name: 'Family member',
+        target_type: 'scrapbook_item',
+        target_id: id,
+        target_description: item?.type === 'photo' ? 'Photo in scrapbook' : `Note: "${item?.content?.slice(0, 40)}…"`,
+        status: 'pending',
+      })
+      alert('Removal request sent to Natalia!')
+    }
   }
 
   async function addTextNote() {
