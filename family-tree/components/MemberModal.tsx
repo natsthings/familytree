@@ -24,6 +24,7 @@ const SOCIAL_TYPES = [
   { value: 'facebook', label: 'Facebook', icon: '📘' },
   { value: 'instagram', label: 'Instagram', icon: '📷' },
   { value: 'obituary', label: 'Obituary', icon: '🕯️' },
+  { value: 'address', label: 'Address', icon: '🏠' },
   { value: 'website', label: 'Website', icon: '🌐' },
   { value: 'other', label: 'Other', icon: '🔗' },
 ]
@@ -328,7 +329,7 @@ export default function MemberModal({
           {/* Social links — edit mode */}
           {(mode === 'edit' || mode === 'add') && (
             <div>
-              <label style={labelStyle}>Links</label>
+              <label style={labelStyle}>Contact Info</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {socialLinks.map((link, i) => (
                   <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -336,8 +337,8 @@ export default function MemberModal({
                       style={{ ...inputStyle, width: 'auto', padding: '8px 10px', fontSize: 12 }}>
                       {SOCIAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
                     </select>
-                    <input type="url" value={link.url} onChange={e => updateSocialLink(i, 'url', e.target.value)}
-                      style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder="https://…" />
+                    <input type={link.type === 'address' ? 'text' : 'url'} value={link.url} onChange={e => updateSocialLink(i, 'url', e.target.value)}
+                      style={{ ...inputStyle, flex: 1, fontSize: 12 }} placeholder={link.type === 'address' ? '123 Main St…' : 'https://…'} />
                     <button onClick={() => removeSocialLink(i)} style={{ background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
                       <X size={14} />
                     </button>
@@ -348,7 +349,7 @@ export default function MemberModal({
                   background: 'transparent', border: '1px dashed #3a3020', borderRadius: 8,
                   color: '#b8a882', fontFamily: 'Lora, serif', fontSize: 12, cursor: 'pointer',
                 }}>
-                  <Plus size={12} /> Add link (Facebook, obituary, website…)
+                  <Plus size={12} /> Add contact info (Facebook, address…)
                 </button>
               </div>
             </div>
