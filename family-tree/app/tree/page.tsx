@@ -1,247 +1,389 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
+import ReactFlow, {
+  Background, Controls, MiniMap,
+  Node, Edge, NodeChange, EdgeChange, Connection,
+  applyNodeChanges, applyEdgeChanges,
+  BackgroundVariant, MarkerType,
+  EdgeMouseHandler,
+} from 'reactflow'
+import 'reactflow/dist/style.css'
 
-const FAMILY_CODE = 'family' // hex 66 61 6D 69 6C 79 = "family"
+import { createClient } from '@/lib/supabase'
+import { Member, Relationship } from '@/lib/types'
+import MemberNode from '@/components/MemberNode'
+import MemberModal from '@/components/MemberModal'
+import WelcomeLetter from '@/components/WelcomeLetter'
+import DeleteRequestModal from '@/components/DeleteRequestModal'
+import MessageBox from '@/components/MessageBox'
+import { LogOut, Plus, TreePine, Save, Mail } from 'lucide-react'
+
 const ADMIN_EMAIL = 'nataliabern2007nb@gmail.com'
 
-export default function RegisterPage() {
+function useDebouncedCallback<T extends (...args: Parameters<T>) => void>(fn: T, delay: number) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  return useCallback((...args: Parameters<T>) => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => fn(...args), delay)
+  }, [fn, delay])
+}
+
+const nodeTypes = { memberNode: MemberNode }
+
+function edgeStyle(relType: string) {
+  const isSpouse = relType === 'spouse'
+  const isSibling = relType === 'sibling'
+  const isHorizontal = isSpouse || isSibling
+  const color = relType === 'spouse' ? '#b06080'
+    : relType === 'sibling' ? '#507090'
+    : relType === 'other' ? '#607060'
+    : '#c49040'
+  return { isHorizontal, isSpouse, color, sourceHandle: isHorizontal ? 'right' : 'bottom', targetHandle: isHorizontal ? 'left' : 'top' }
+}
+
+export default function TreePage() {
   const router = useRouter()
-  const [step, setStep] = useState<'code' | 'account' | 'claim'>('code')
-  const [familyCode, setFamilyCode] = useState('')
-  const [codeError, setCodeError] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [yourName, setYourName] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
-  const [members, setMembers] = useState<any[]>([])
-  const [claimChoice, setClaimChoice] = useState<'existing' | 'new' | null>(null)
-  const [selectedMemberId, setSelectedMemberId] = useState('')
-  const [newMemberName, setNewMemberName] = useState('')
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string>('')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [members, setMembers] = useState<Member[]>([])
+  const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [nodes, setNodes] = useState<Node[]>([])
+  const [localEdges, setLocalEdges] = useState<Edge[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [showWelcome, setShowWelcome] = useState(false)
+  const [edgeTooltip, setEdgeTooltip] = useState<{ x: number; y: number; label: string } | null>(null)
+  const [deleteRequest, setDeleteRequest] = useState<{ targetType: 'member' | 'relationship'; targetId: string; description: string } | null>(null)
+  const [messageBox, setMessageBox] = useState<{ memberId: string; memberName: string } | null>(null)
 
-  function checkCode() {
-    const input = familyCode.trim().toLowerCase().replace(/\s/g, '')
-    // Only accept the hex string (spaces optional)
-    if (input === '66616d696c79') {
-      setStep('account')
-      setCodeError('')
-    } else {
-      setCodeError('Incorrect code. Ask Natalia if you need it.')
-    }
-  }
+  const [modal, setModal] = useState<{
+    mode: 'add' | 'edit' | 'connect'
+    member?: Member
+    sourceForConnect?: Member
+  } | null>(null)
+  const [pendingConnect, setPendingConnect] = useState<{ sourceId: string; targetId: string } | null>(null)
 
-  async function handleRegister() {
-    setLoading(true)
-    setError('')
+  useEffect(() => {
     const supabase = createClient()
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { router.replace('/login'); return }
+      setUserId(session.user.id)
+      setUserEmail(session.user.email ?? null)
+      setIsAdmin(session.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase())
 
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
-    if (signUpError || !data.user) {
-      setError(signUpError?.message || 'Sign up failed')
-      setLoading(false)
-      return
-    }
+      // Show welcome letter once per login session (not on refresh)
+      const sessionSeen = sessionStorage.getItem('welcomeSeen')
+      if (!sessionSeen) {
+        setShowWelcome(true)
+        sessionStorage.setItem('welcomeSeen', '1')
+      }
+    })
+  }, [router])
 
-    setUserId(data.user.id)
+  async function loadData() {
+    if (!userId) return
+    const supabase = createClient()
+    const [{ data: membersData }, { data: relsData }, { data: myPositions }] = await Promise.all([
+      supabase.from('members').select('*').order('name'),
+      supabase.from('relationships').select('*'),
+      supabase.from('member_positions').select('*').eq('user_id', userId),
+    ])
 
-    // Load existing unclaimed members for claiming
-    const { data: membersData } = await supabase
-      .from('members')
-      .select('id, name, birth_date, birth_year, claimed_by')
-      .is('claimed_by', null)
-      .order('name')
+    const allMembers = (membersData ?? []).map((m: any) => {
+      // Override position with this user's saved position if it exists
+      const myPos = myPositions?.find((p: any) => p.member_id === m.id)
+      return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
+    })
 
-    setMembers(membersData ?? [])
-    setStep('claim')
+    setMembers(allMembers)
+    setRelationships(relsData ?? [])
+
+    // Find the current user's name from their claimed profile
+    const myProfile = allMembers.find((m: any) => m.claimed_by === userId)
+    if (myProfile) setUserName(myProfile.name)
+
     setLoading(false)
   }
 
-  async function handleClaim() {
-    if (!userId) return
-    setLoading(true)
-    const supabase = createClient()
-    const isAdmin = email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+  useEffect(() => { if (userId) loadData() }, [userId])
 
-    if (claimChoice === 'existing' && selectedMemberId) {
-      // Claim existing profile
-      await supabase.from('members').update({
-        claimed_by: userId,
-        is_admin: isAdmin,
-      }).eq('id', selectedMemberId)
+  useEffect(() => {
+    const newNodes: Node[] = members.map((m) => ({
+      id: m.id,
+      type: 'memberNode',
+      position: { x: m.position_x, y: m.position_y },
+      data: {
+        member: m,
+        currentUserId: userId,
+        isAdmin,
+        onEdit: (member: Member) => setModal({ mode: 'edit', member }),
+        onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
+        onMessage: (member: Member) => setMessageBox({ memberId: member.id, memberName: member.name }),
+      },
+    }))
+    setNodes(newNodes)
+  }, [members, userId, isAdmin])
 
-    } else if (claimChoice === 'new') {
-      // Create new profile and claim it
-      await supabase.from('members').insert({
-        user_id: userId,
-        name: newMemberName || yourName,
-        is_root: false,
-        is_admin: isAdmin,
-        claimed_by: userId,
-        position_x: Math.random() * 400,
-        position_y: Math.random() * 400,
-      })
-    }
-
-    // Create user prefs
-    await supabase.from('user_prefs').insert({
-      user_id: userId,
-      has_seen_welcome: false,
-      language: 'en',
+  const builtEdges: Edge[] = useMemo(() => {
+    return relationships.map((r) => {
+      const { isHorizontal, isSpouse, color, sourceHandle, targetHandle } = edgeStyle(r.relation_type)
+      const src = members.find(m => m.id === r.source_id)
+      const tgt = members.find(m => m.id === r.target_id)
+      const tooltipLabel = src && tgt
+        ? `${src.name} & ${tgt.name} · ${r.relation_type}`
+        : r.relation_type
+      return {
+        id: r.id,
+        source: r.source_id,
+        target: r.target_id,
+        sourceHandle,
+        targetHandle,
+        type: 'smoothstep',
+        className: `edge-${r.relation_type}`,
+        data: { tooltipLabel, relType: r.relation_type },
+        label: r.label ? r.label : isSpouse ? '♥' : '',
+        labelStyle: { fill: isSpouse ? '#b06080' : '#b8a882', fontFamily: 'Lora, serif', fontSize: isSpouse ? 14 : 11, fontStyle: 'italic' },
+        labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
+        style: { stroke: color, strokeWidth: isSpouse ? 2 : 1.5, strokeDasharray: isSpouse ? '6 3' : undefined },
+        markerEnd: !isHorizontal ? { type: MarkerType.ArrowClosed, color, width: 14, height: 14 } : undefined,
+        animated: isSpouse,
+      }
     })
+  }, [relationships, members])
 
-    router.push('/tree')
+  useEffect(() => { setLocalEdges(builtEdges) }, [builtEdges])
+
+  // Position saving — everyone saves their own view to member_positions
+  // Admin additionally updates the master positions on members table
+  const savePositions = useDebouncedCallback(
+    async (updatedNodes: Node[]) => {
+      if (!userId) return
+      setSaveStatus('saving')
+      const supabase = createClient()
+      // Save per-user positions
+      await Promise.all(updatedNodes.map((n) =>
+        supabase.from('member_positions').upsert({
+          user_id: userId,
+          member_id: n.id,
+          position_x: n.position.x,
+          position_y: n.position.y,
+        }, { onConflict: 'user_id,member_id' })
+      ))
+      // Admin also updates master layout
+      if (isAdmin) {
+        await Promise.all(updatedNodes.map((n) =>
+          supabase.from('members').update({ position_x: n.position.x, position_y: n.position.y }).eq('id', n.id)
+        ))
+      }
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    }, 1200
+  )
+
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((nds) => {
+      const updated = applyNodeChanges(changes, nds)
+      const hasMoved = changes.some((c) => c.type === 'position' && c.dragging === false)
+      if (hasMoved) savePositions(updated)
+      return updated
+    })
+  }, [savePositions])
+
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    const removals = changes.filter((c) => c.type === 'remove')
+    if (removals.length > 0) {
+      if (!isAdmin) {
+        // Non-admin: show delete request for each removed edge
+        const ids = removals.map(c => c.id)
+        const rel = relationships.find(r => ids.includes(r.id))
+        if (rel) {
+          const src = members.find(m => m.id === rel.source_id)
+          const tgt = members.find(m => m.id === rel.target_id)
+          setDeleteRequest({ targetType: 'relationship', targetId: rel.id, description: `${src?.name ?? '?'} ↔ ${tgt?.name ?? '?'} (${rel.relation_type})` })
+        }
+        return // don't remove from local state
+      }
+      const supabase = createClient()
+      const ids = removals.map((c) => c.id)
+      setRelationships((prev) => prev.filter((r) => !ids.includes(r.id)))
+      ids.forEach((id) => supabase.from('relationships').delete().eq('id', id))
+    }
+    setLocalEdges((eds) => applyEdgeChanges(changes, eds))
+  }, [isAdmin, relationships, members])
+
+  const onConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target) return
+    const sourceMember = members.find(m => m.id === connection.source)
+    if (sourceMember) {
+      setPendingConnect({ sourceId: connection.source, targetId: connection.target })
+      setModal({ mode: 'connect', sourceForConnect: sourceMember })
+    }
+  }, [members])
+
+  const onEdgeMouseEnter: EdgeMouseHandler = useCallback((event, edge) => {
+    setEdgeTooltip({ x: event.clientX, y: event.clientY, label: edge.data?.tooltipLabel ?? '' })
+  }, [])
+  const onEdgeMouseMove: EdgeMouseHandler = useCallback((event, edge) => {
+    setEdgeTooltip({ x: event.clientX, y: event.clientY, label: edge.data?.tooltipLabel ?? '' })
+  }, [])
+  const onEdgeMouseLeave: EdgeMouseHandler = useCallback(() => {
+    setEdgeTooltip(null)
+  }, [])
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.replace('/login')
   }
 
-  const inputCls = "w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-[var(--ink)] font-body text-sm focus:outline-none focus:border-[var(--gold)] transition-colors"
-  const labelCls = "block text-xs font-mono text-[var(--parchment-dim)] uppercase tracking-widest mb-1.5"
+  function handleModalSaved(deletedMemberId?: string) {
+    setModal(null)
+    setPendingConnect(null)
+    if (deletedMemberId) {
+      setMembers(prev => prev.filter(m => m.id !== deletedMemberId))
+      setRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
+    } else {
+      loadData()
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen gap-3">
+        <div className="w-6 h-6 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
+        <span className="font-body text-[var(--parchment-dim)] italic">Growing your tree…</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-        {[600, 900, 1200, 1600].map((size) => (
-          <div key={size} className="absolute rounded-full border border-[var(--border)]"
-            style={{ width: size, height: size, opacity: 0.3 }} />
+    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+      {/* Welcome letter */}
+      {showWelcome && <WelcomeLetter onClose={() => setShowWelcome(false)} />}
+
+      {/* Edge tooltip */}
+      {edgeTooltip && (
+        <div style={{
+          position: 'fixed', left: edgeTooltip.x + 12, top: edgeTooltip.y - 32,
+          zIndex: 20, pointerEvents: 'none',
+          background: 'rgba(28,22,16,0.95)', border: '1px solid #3a3020',
+          borderRadius: 8, padding: '5px 10px',
+          fontFamily: 'Lora, serif', fontSize: 12, color: '#f5edd8',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          whiteSpace: 'nowrap',
+        }}>
+          {edgeTooltip.label}
+        </div>
+      )}
+
+      {/* Top bar */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        display: 'flex', alignItems: 'center', padding: '12px 20px',
+        background: 'linear-gradient(to bottom, rgba(15,12,8,0.95) 0%, rgba(15,12,8,0) 100%)',
+        pointerEvents: 'none',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
+          <TreePine size={22} color="#c49040" />
+          <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#f5edd8', fontWeight: 600 }}>Roots</span>
+        </div>
+        <div style={{ flex: 1 }} />
+        {saveStatus !== 'idle' && (
+          <div style={{ pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 6, color: '#b8a882', fontFamily: 'DM Mono, monospace', fontSize: 11, marginRight: 16 }}>
+            <Save size={12} /> {saveStatus === 'saving' ? 'saving…' : '✓ saved'}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
+          <button onClick={() => setShowWelcome(true)} title="Read welcome letter" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+            <Mail size={13} />
+          </button>
+          <button onClick={() => setModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8, padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <Plus size={14} /> Add member
+          </button>
+          <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+            <LogOut size={13} /> Sign out
+          </button>
+        </div>
+      </div>
+
+      <ReactFlow
+        nodes={nodes}
+        edges={localEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onEdgeMouseEnter={onEdgeMouseEnter}
+        onEdgeMouseMove={onEdgeMouseMove}
+        onEdgeMouseLeave={onEdgeMouseLeave}
+        nodeTypes={nodeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.3 }}
+        defaultEdgeOptions={{ type: 'smoothstep' }}
+        proOptions={{ hideAttribution: true }}
+        connectionLineStyle={{ stroke: '#c49040', strokeWidth: 1.5 }}
+        connectionLineType={'smoothstep' as any}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(196,144,64,0.15)" />
+        <Controls position="bottom-right" style={{ bottom: 24, right: 24 }} />
+        <MiniMap position="bottom-left" style={{ bottom: 24, left: 24 }}
+          nodeColor={(n) => (n.data as any).member?.is_root ? '#c49040' : '#3a3020'}
+          maskColor="rgba(15,12,8,0.8)" />
+      </ReactFlow>
+
+      {/* Legend */}
+      <div style={{ position: 'absolute', top: 70, right: 16, zIndex: 10, background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020', borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: 160 }}>
+        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Legend</div>
+        {[['→', '#c49040', 'Parent → Child'], ['♥', '#b06080', 'Spouse'], ['—', '#507090', 'Sibling'], ['—', '#607060', 'Other']].map(([icon, color, label]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+            <span style={{ color, fontSize: icon === '♥' ? 14 : 16, lineHeight: 1 }}>{icon}</span>
+            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color }}>{label}</span>
+          </div>
         ))}
-      </div>
-
-      <div className="relative w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="text-5xl mb-4">🌳</div>
-          <h1 className="font-display text-4xl text-[var(--parchment)] mb-2">Roots</h1>
-          <p className="text-[var(--parchment-dim)] font-body italic text-sm">Join the family tree</p>
-        </div>
-
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8">
-
-          {/* Step 1: Family code */}
-          {step === 'code' && (
-            <>
-              <h2 className="font-display text-xl text-[var(--parchment)] mb-2">Enter the family code</h2>
-              <p className="text-sm text-[var(--parchment-dim)] font-body italic mb-6">
-                Ask Natalia for the code to join.
-              </p>
-              {codeError && (
-                <div className="mb-4 p-3 bg-red-950/50 border border-red-800/50 rounded-lg text-red-300 text-sm font-body">
-                  {codeError}
-                </div>
-              )}
-              <div className="space-y-4">
-                <div>
-                  <label className={labelCls}>Family Code</label>
-                  <input type="text" value={familyCode} onChange={e => setFamilyCode(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && checkCode()}
-                    className={inputCls} placeholder="Enter code…" />
-                </div>
-                <button onClick={checkCode}
-                  className="w-full bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-[var(--bark-900)] font-display font-semibold py-3 rounded-lg transition-colors">
-                  Continue
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Step 2: Create account */}
-          {step === 'account' && (
-            <>
-              <h2 className="font-display text-xl text-[var(--parchment)] mb-2">Create your account</h2>
-              <p className="text-sm text-[var(--parchment-dim)] font-body italic mb-6">
-                Welcome to the family. ✦
-              </p>
-              {error && (
-                <div className="mb-4 p-3 bg-red-950/50 border border-red-800/50 rounded-lg text-red-300 text-sm font-body">
-                  {error}
-                </div>
-              )}
-              <div className="space-y-4">
-                <div>
-                  <label className={labelCls}>Your Name</label>
-                  <input type="text" value={yourName} onChange={e => setYourName(e.target.value)}
-                    className={inputCls} placeholder="Full name" />
-                </div>
-                <div>
-                  <label className={labelCls}>Email</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    className={inputCls} placeholder="you@example.com" />
-                </div>
-                <div>
-                  <label className={labelCls}>Password</label>
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                    minLength={6} className={inputCls} placeholder="Min. 6 characters" />
-                </div>
-                <button onClick={handleRegister} disabled={loading || !email || !password}
-                  className="w-full bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-[var(--bark-900)] font-display font-semibold py-3 rounded-lg transition-colors disabled:opacity-50">
-                  {loading ? 'Creating account…' : 'Continue'}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Step 3: Claim a profile */}
-          {step === 'claim' && (
-            <>
-              <h2 className="font-display text-xl text-[var(--parchment)] mb-2">Claim your profile</h2>
-              <p className="text-sm text-[var(--parchment-dim)] font-body italic mb-6">
-                Are you already on the tree? Claim your box, or create a new one.
-              </p>
-              <div className="space-y-3 mb-6">
-                <button onClick={() => setClaimChoice('existing')}
-                  style={{ background: claimChoice === 'existing' ? '#c49040' : 'transparent', color: claimChoice === 'existing' ? '#1a1208' : '#b8a882', border: `1px solid ${claimChoice === 'existing' ? '#c49040' : '#3a3020'}` }}
-                  className="w-full py-3 rounded-lg font-body text-sm transition-all">
-                  I'm already on the tree — claim my profile
-                </button>
-                <button onClick={() => setClaimChoice('new')}
-                  style={{ background: claimChoice === 'new' ? '#c49040' : 'transparent', color: claimChoice === 'new' ? '#1a1208' : '#b8a882', border: `1px solid ${claimChoice === 'new' ? '#c49040' : '#3a3020'}` }}
-                  className="w-full py-3 rounded-lg font-body text-sm transition-all">
-                  I'm not on the tree yet — create my profile
-                </button>
-              </div>
-
-              {claimChoice === 'existing' && (
-                <div className="mb-4">
-                  <label className={labelCls}>Select your profile</label>
-                  <select value={selectedMemberId} onChange={e => setSelectedMemberId(e.target.value)}
-                    className={inputCls}>
-                    <option value="">— choose your name —</option>
-                    {members.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}{m.birth_year ? ` (b. ${m.birth_year})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {claimChoice === 'new' && (
-                <div className="mb-4">
-                  <label className={labelCls}>Your name on the tree</label>
-                  <input type="text" value={newMemberName || yourName}
-                    onChange={e => setNewMemberName(e.target.value)}
-                    className={inputCls} placeholder="Full name" />
-                </div>
-              )}
-
-              {claimChoice && (
-                <button onClick={handleClaim} disabled={loading || (claimChoice === 'existing' && !selectedMemberId)}
-                  className="w-full bg-[var(--gold)] hover:bg-[var(--gold-bright)] text-[var(--bark-900)] font-display font-semibold py-3 rounded-lg transition-colors disabled:opacity-50">
-                  {loading ? 'Joining…' : 'Enter the tree 🌳'}
-                </button>
-              )}
-            </>
-          )}
-
-          <p className="text-center text-sm font-body text-[var(--parchment-dim)] mt-6">
-            Already have an account?{' '}
-            <Link href="/login" className="text-[var(--gold)] hover:text-[var(--gold-bright)] transition-colors">
-              Sign in
-            </Link>
-          </p>
+        <div style={{ borderTop: '1px solid #3a3020', paddingTop: 8, marginTop: 4 }}>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic', display: 'block', marginBottom: 2 }}>💡 Double-click to edit</span>
+          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic', display: 'block' }}>✦ Drag dot to connect</span>
         </div>
       </div>
+
+      {modal && userId && (
+        <MemberModal
+          mode={modal.mode}
+          member={modal.member}
+          sourceForConnect={modal.sourceForConnect}
+          userId={userId}
+          isAdmin={isAdmin}
+          onClose={() => { setModal(null); setPendingConnect(null) }}
+          onSaved={(deletedId) => handleModalSaved(deletedId)}
+          onRequestDelete={(targetId, description) => setDeleteRequest({ targetType: 'member', targetId, description })}
+          pendingTargetId={pendingConnect?.targetId}
+          allMembers={members}
+        />
+      )}
+
+      {deleteRequest && userId && (
+        <DeleteRequestModal
+          userId={userId}
+          requesterName={userName || userEmail || 'Unknown'}
+          targetType={deleteRequest.targetType}
+          targetId={deleteRequest.targetId}
+          targetDescription={deleteRequest.description}
+          onClose={() => setDeleteRequest(null)}
+        />
+      )}
+
+      {messageBox && userId && (
+        <MessageBox
+          memberId={messageBox.memberId}
+          memberName={messageBox.memberName}
+          currentUserId={userId}
+          currentUserName={userName || userEmail || 'Someone'}
+          onClose={() => setMessageBox(null)}
+        />
+      )}
     </div>
   )
 }
