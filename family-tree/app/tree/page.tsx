@@ -50,6 +50,9 @@ export default function TreePage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userName, setUserName] = useState<string>('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [privateMode, setPrivateMode] = useState(false)
+  const [privateNotes, setPrivateNotes] = useState<Record<string, string>>({})
+  const [privateRelationships, setPrivateRelationships] = useState<Relationship[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -88,14 +91,19 @@ export default function TreePage() {
   async function loadData() {
     if (!userId) return
     const supabase = createClient()
-    const [{ data: membersData }, { data: relsData }, { data: myPositions }] = await Promise.all([
+    const queries: Promise<any>[] = [
       supabase.from('members').select('*').order('name'),
       supabase.from('relationships').select('*'),
       supabase.from('member_positions').select('*').eq('user_id', userId),
-    ])
+    ]
+    if (isAdmin) {
+      queries.push(supabase.from('private_notes').select('*').eq('user_id', userId))
+      queries.push(supabase.from('private_relationships').select('*').eq('user_id', userId))
+    }
+    const results = await Promise.all(queries)
+    const [{ data: membersData }, { data: relsData }, { data: myPositions }] = results
 
     const allMembers = (membersData ?? []).map((m: any) => {
-      // Override position with this user's saved position if it exists
       const myPos = myPositions?.find((p: any) => p.member_id === m.id)
       return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
     })
@@ -103,7 +111,13 @@ export default function TreePage() {
     setMembers(allMembers)
     setRelationships(relsData ?? [])
 
-    // Find the current user's name from their claimed profile
+    if (isAdmin && results[3] && results[4]) {
+      const notesMap: Record<string, string> = {}
+      ;(results[3].data ?? []).forEach((n: any) => { notesMap[n.member_id] = n.note })
+      setPrivateNotes(notesMap)
+      setPrivateRelationships(results[4].data ?? [])
+    }
+
     const myProfile = allMembers.find((m: any) => m.claimed_by === userId)
     if (myProfile) setUserName(myProfile.name)
 
@@ -130,7 +144,10 @@ export default function TreePage() {
   }, [members, userId, isAdmin])
 
   const builtEdges: Edge[] = useMemo(() => {
-    return relationships.map((r) => {
+    const allRels = privateMode
+      ? [...relationships, ...privateRelationships.map(r => ({ ...r, _private: true }))]
+      : relationships
+    return allRels.map((r: any) => {
       const { isHorizontal, isSpouse, color, sourceHandle, targetHandle } = edgeStyle(r.relation_type)
       const src = members.find(m => m.id === r.source_id)
       const tgt = members.find(m => m.id === r.target_id)
@@ -144,8 +161,8 @@ export default function TreePage() {
         sourceHandle,
         targetHandle,
         type: 'smoothstep',
-        className: `edge-${r.relation_type}`,
-        data: { tooltipLabel, relType: r.relation_type },
+        className: `edge-${r.relation_type}${r._private ? ' edge-private' : ''}`,
+        data: { tooltipLabel: r._private ? `🔒 ${tooltipLabel}` : tooltipLabel, relType: r.relation_type, isPrivate: r._private },
         label: r.label ? r.label : isSpouse ? '♥' : '',
         labelStyle: { fill: isSpouse ? '#b06080' : '#b8a882', fontFamily: 'Lora, serif', fontSize: isSpouse ? 14 : 11, fontStyle: 'italic' },
         labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
@@ -154,7 +171,7 @@ export default function TreePage() {
         animated: isSpouse,
       }
     })
-  }, [relationships, members])
+  }, [relationships, privateRelationships, members, privateMode])
 
   useEffect(() => { setLocalEdges(builtEdges) }, [builtEdges])
 
@@ -210,8 +227,17 @@ export default function TreePage() {
       }
       const supabase = createClient()
       const ids = removals.map((c) => c.id)
-      setRelationships((prev) => prev.filter((r) => !ids.includes(r.id)))
-      ids.forEach((id) => supabase.from('relationships').delete().eq('id', id))
+      // Check if this is a private relationship
+      const privateIds = ids.filter(id => privateRelationships.some(r => r.id === id))
+      const publicIds = ids.filter(id => !privateIds.includes(id))
+      if (privateIds.length > 0) {
+        setPrivateRelationships(prev => prev.filter(r => !privateIds.includes(r.id)))
+        privateIds.forEach(id => supabase.from('private_relationships').delete().eq('id', id))
+      }
+      if (publicIds.length > 0) {
+        setRelationships((prev) => prev.filter((r) => !publicIds.includes(r.id)))
+        publicIds.forEach((id) => supabase.from('relationships').delete().eq('id', id))
+      }
     }
     setLocalEdges((eds) => applyEdgeChanges(changes, eds))
   }, [isAdmin, relationships, members])
@@ -266,6 +292,13 @@ export default function TreePage() {
       {/* Welcome letter */}
       {showWelcome && <WelcomeLetter onClose={() => setShowWelcome(false)} />}
 
+      {/* Private mode banner */}
+      {privateMode && (
+        <div style={{ position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(80,40,80,0.85)', border: '1px solid #806080', borderRadius: 20, padding: '4px 16px', fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#d090d0', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+          🔒 Private view — your changes here are invisible to everyone else
+        </div>
+      )}
+
       {/* Edge tooltip */}
       {edgeTooltip && (
         <div style={{
@@ -302,6 +335,11 @@ export default function TreePage() {
           <button onClick={() => setShowWelcome(true)} title="Read welcome letter" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
             <Mail size={13} />
           </button>
+          {isAdmin && (
+            <button onClick={() => setPrivateMode(p => !p)} title={privateMode ? 'Switch to public tree' : 'Switch to private tree'} style={{ display: 'flex', alignItems: 'center', gap: 6, background: privateMode ? 'rgba(80,40,80,0.5)' : 'rgba(255,255,255,0.05)', color: privateMode ? '#d090d0' : '#b8a882', border: `1px solid ${privateMode ? '#806080' : '#3a3020'}`, borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+              {privateMode ? '🔒 Private' : '🌐 Public'}
+            </button>
+          )}
           <button onClick={() => setModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8, padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> Add member
           </button>
