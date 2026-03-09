@@ -68,11 +68,12 @@ export default function RegisterPage() {
     const isAdmin = email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
 
     if (claimChoice === 'existing' && selectedMemberId) {
-      // Claim existing profile
-      await supabase.from('members').update({
-        claimed_by: userId,
-        is_admin: isAdmin,
-      }).eq('id', selectedMemberId)
+      // Claim existing profile via security-definer RPC (bypasses RLS)
+      await supabase.rpc('claim_member', {
+        member_id: selectedMemberId,
+        claimer_id: userId,
+        make_admin: isAdmin,
+      })
 
     } else if (claimChoice === 'new') {
       // Create new profile and claim it
@@ -113,7 +114,7 @@ export default function RegisterPage() {
         <div className="text-center mb-10">
           <div className="text-5xl mb-4">🌳</div>
           <h1 className="font-display text-4xl text-[var(--parchment)] mb-2">Roots</h1>
-          <p className="text-[var(--parchment-dim)] font-body italic text-sm">Join the family tree (write down the password somewhere safe, I can't access it)</p>
+          <p className="text-[var(--parchment-dim)] font-body italic text-sm">Join the family tree</p>
         </div>
 
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8">
