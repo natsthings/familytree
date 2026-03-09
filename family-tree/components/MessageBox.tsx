@@ -45,23 +45,30 @@ export default function MessageBox({ currentUserId, currentUserName, toUserId, t
   useEffect(() => {
     if (view !== 'inbox') return
     const supabase = createClient()
-    supabase.from('messages').select('*')
-      .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (!data) return
-        // Group by the other person
-        const map: Record<string, Conversation> = {}
-        data.forEach((m: Message) => {
-          const otherId = m.sender_id === currentUserId ? m.recipient_id : m.sender_id
-          const otherName = m.sender_id === currentUserId ? (m as any).recipient_name : m.sender_name
-          if (!map[otherId]) {
-            map[otherId] = { userId: otherId, userName: otherName, lastMessage: m.content, lastAt: m.created_at, unread: 0 }
-          }
-          if (!m.read && m.recipient_id === currentUserId) map[otherId].unread++
-        })
-        setConversations(Object.values(map))
+    Promise.all([
+      supabase.from('messages').select('*')
+        .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+        .order('created_at', { ascending: false }),
+      supabase.from('members').select('id, name, claimed_by').not('claimed_by', 'is', null),
+    ]).then(([{ data: msgs }, { data: claimedMembers }]) => {
+      if (!msgs) return
+      // Build a map of auth user ID -> member name
+      const nameMap: Record<string, string> = {}
+      ;(claimedMembers ?? []).forEach((m: any) => {
+        if (m.claimed_by) nameMap[m.claimed_by] = m.name
       })
+      // Group messages by the other person
+      const map: Record<string, Conversation> = {}
+      msgs.forEach((m: Message) => {
+        const otherId = m.sender_id === currentUserId ? m.recipient_id : m.sender_id
+        const otherName = nameMap[otherId] ?? (m.sender_id === currentUserId ? (m as any).recipient_name : m.sender_name) ?? 'Family member'
+        if (!map[otherId]) {
+          map[otherId] = { userId: otherId, userName: otherName, lastMessage: m.content, lastAt: m.created_at, unread: 0 }
+        }
+        if (!m.read && m.recipient_id === currentUserId) map[otherId].unread++
+      })
+      setConversations(Object.values(map))
+    })
   }, [view, currentUserId])
 
   // Load conversation messages
