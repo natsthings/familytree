@@ -110,3 +110,6 @@ body::before {
 .edge-other .react-flow__edge-path { stroke: #607060 !important; }
 .edge-parent .react-flow__edge-path,
 .edge-child .react-flow__edge-path { stroke: #c49040 !important; }
+
+/* Private mode edges — purple dashed */
+.edge-private .react-flow__edge-path { stroke: #a060a0 !important; stroke-dasharray: 4 4 !important; opacity: 0.7 !important; }
