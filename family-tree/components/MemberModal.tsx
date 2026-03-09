@@ -124,16 +124,6 @@ export default function MemberModal({
           position_y: Math.random() * 400 - 200,
         })
         if (error) throw error
-      } else if (mode === 'connect' && privateMode) {
-        // Save to private relationships only
-        const { error } = await supabase.from('private_relationships').insert({
-          user_id: userId,
-          source_id: sourceForConnect!.id,
-          target_id: targetId,
-          relation_type: relationType,
-          label: relationType === 'other' && customLabel ? customLabel : null,
-        })
-        if (error) throw error
       } else if (mode === 'connect') {
         let targetId = selectedExistingId
         if (connectTo === 'new') {
