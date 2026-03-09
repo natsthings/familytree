@@ -1,376 +1,380 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import ReactFlow, {
-  Background,
-  Controls,
-  MiniMap,
-  Node,
-  Edge,
-  NodeChange,
-  EdgeChange,
-  Connection,
-  applyNodeChanges,
-  applyEdgeChanges,
-  addEdge,
-  BackgroundVariant,
-  MarkerType,
-} from 'reactflow'
-import 'reactflow/dist/style.css'
-
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Member, Relationship } from '@/lib/types'
-import MemberNode from '@/components/MemberNode'
-import MemberModal from '@/components/MemberModal'
-import { LogOut, Plus, TreePine, Save } from 'lucide-react'
+import { Member, ScrapbookItem, SocialLink } from '@/lib/types'
+import { uploadToCloudinary } from '@/lib/cloudinary'
+import { ArrowLeft, Plus, Type, Image as ImageIcon, X, ExternalLink, Check } from 'lucide-react'
 
-function useDebouncedCallback<T extends (...args: Parameters<T>) => void>(fn: T, delay: number) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  return useCallback(
-    (...args: Parameters<T>) => {
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => fn(...args), delay)
-    },
-    [fn, delay]
+const SOCIAL_ICONS: Record<string, string> = {
+  facebook: '📘', instagram: '📷', obituary: '🕯️', website: '🌐', other: '🔗'
+}
+
+// A single draggable scrapbook item
+function ScrapItem({
+  item, onUpdate, onDelete, selected, onSelect,
+}: {
+  item: ScrapbookItem
+  onUpdate: (id: string, patch: Partial<ScrapbookItem>) => void
+  onDelete: (id: string) => void
+  selected: boolean
+  onSelect: (id: string | null) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null)
+  const [editingCaption, setEditingCaption] = useState(false)
+  const [captionVal, setCaptionVal] = useState(item.caption ?? '')
+  const [dateVal, setDateVal] = useState(item.date_taken ?? '')
+  const [editingText, setEditingText] = useState(false)
+  const [textVal, setTextVal] = useState(item.content)
+  const [showMeta, setShowMeta] = useState(false)
+
+  function onMouseDown(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest('button, input, textarea, a')) return
+    e.preventDefault()
+    onSelect(item.id)
+    dragStart.current = { mx: e.clientX, my: e.clientY, ox: item.pos_x, oy: item.pos_y }
+    function onMove(ev: MouseEvent) {
+      if (!dragStart.current) return
+      onUpdate(item.id, {
+        pos_x: dragStart.current.ox + (ev.clientX - dragStart.current.mx),
+        pos_y: dragStart.current.oy + (ev.clientY - dragStart.current.my),
+      })
+    }
+    function onUp() {
+      dragStart.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  function saveCaption() {
+    onUpdate(item.id, { caption: captionVal, date_taken: dateVal || null })
+    setEditingCaption(false)
+    setShowMeta(false)
+  }
+
+  function saveText() {
+    onUpdate(item.id, { content: textVal })
+    setEditingText(false)
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseDown={onMouseDown}
+      onClick={(e) => { e.stopPropagation(); onSelect(item.id) }}
+      style={{
+        position: 'absolute',
+        left: item.pos_x, top: item.pos_y,
+        width: item.width,
+        transform: `rotate(${item.rotation}deg)`,
+        cursor: 'grab',
+        userSelect: 'none',
+        zIndex: selected ? 20 : 10,
+        filter: selected ? 'drop-shadow(0 4px 20px rgba(196,144,64,0.4))' : 'drop-shadow(0 2px 8px rgba(0,0,0,0.5))',
+        transition: 'filter 0.15s',
+      }}
+    >
+      {/* Photo item */}
+      {item.type === 'photo' && (
+        <div style={{ background: '#f5edd8', padding: '8px 8px 32px', borderRadius: 2 }}>
+          <img src={item.content} alt={item.caption ?? ''} style={{ width: '100%', display: 'block', borderRadius: 1, minHeight: 80, objectFit: 'cover' }} />
+          {/* Caption area */}
+          {editingCaption ? (
+            <div style={{ padding: '4px 0' }}>
+              <input value={dateVal} onChange={e => setDateVal(e.target.value)} placeholder="Date (e.g. Summer 1985)" type="text"
+                style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #c49040', fontFamily: 'Lora, serif', fontSize: 10, color: '#3a2c10', marginBottom: 4, outline: 'none' }} />
+              <textarea value={captionVal} onChange={e => setCaptionVal(e.target.value)} placeholder="Add a caption…" rows={2}
+                style={{ width: '100%', background: 'transparent', border: 'none', resize: 'none', fontFamily: 'Lora, serif', fontSize: 11, color: '#3a2c10', outline: 'none', boxSizing: 'border-box' }} />
+              <button onClick={saveCaption} style={{ background: '#c49040', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', color: '#1a1208' }}>✓ Done</button>
+            </div>
+          ) : (
+            <div onClick={() => { setEditingCaption(true); setShowMeta(true) }} style={{ cursor: 'text', padding: '4px 0' }}>
+              {item.date_taken && <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#8a7050', marginBottom: 2 }}>{item.date_taken}</div>}
+              <div style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#3a2c10', fontStyle: 'italic', minHeight: 16 }}>
+                {item.caption || <span style={{ opacity: 0.4 }}>Click to add caption…</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Text note item */}
+      {item.type === 'text' && (
+        <div style={{ background: '#f9f3d4', padding: 14, borderRadius: 2, minHeight: 80, boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)' }}>
+          {editingText ? (
+            <div>
+              <textarea value={textVal} onChange={e => setTextVal(e.target.value)} rows={6} autoFocus
+                style={{ width: '100%', background: 'transparent', border: 'none', resize: 'none', fontFamily: 'Lora, serif', fontSize: 13, color: '#3a2c10', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+              <button onClick={saveText} style={{ background: '#c49040', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', color: '#1a1208' }}>✓ Done</button>
+            </div>
+          ) : (
+            <div onClick={() => setEditingText(true)} style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#3a2c10', lineHeight: 1.6, whiteSpace: 'pre-wrap', minHeight: 60, cursor: 'text' }}>
+              {item.content || <span style={{ opacity: 0.4, fontStyle: 'italic' }}>Click to write…</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Delete button — shown when selected */}
+      {selected && (
+        <button
+          onMouseDown={e => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete(item.id) }}
+          style={{
+            position: 'absolute', top: -10, right: -10,
+            width: 22, height: 22, borderRadius: '50%',
+            background: '#8b2020', border: '2px solid #1c1610',
+            color: '#fff', cursor: 'pointer', fontSize: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 30,
+          }}
+        >
+          <X size={12} />
+        </button>
+      )}
+    </div>
   )
 }
 
-const nodeTypes = { memberNode: MemberNode }
-
-// Determine edge style from relation type
-function edgeStyle(relType: string) {
-  const isSpouse = relType === 'spouse'
-  const isSibling = relType === 'sibling'
-  const isHorizontal = isSpouse || isSibling
-  const color = relType === 'spouse' ? '#b06080'
-    : relType === 'sibling' ? '#507090'
-    : relType === 'other' ? '#607060'
-    : '#c49040'
-
-  return {
-    isHorizontal,
-    isSpouse,
-    color,
-    sourceHandle: isHorizontal ? 'right' : 'bottom',
-    targetHandle: isHorizontal ? 'left' : 'top',
-  }
-}
-
-// Pending drag-connect state
-interface PendingConnect {
-  sourceId: string
-  sourceHandle: string
-}
-
-export default function TreePage() {
+export default function ScrapbookPage() {
   const router = useRouter()
+  const params = useParams()
+  const memberId = params.memberId as string
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [userId, setUserId] = useState<string | null>(null)
-  const [members, setMembers] = useState<Member[]>([])
-  const [relationships, setRelationships] = useState<Relationship[]>([])
-  const [nodes, setNodes] = useState<Node[]>([])
-  const [localEdges, setLocalEdges] = useState<Edge[]>([])
+  const [member, setMember] = useState<Member | null>(null)
+  const [items, setItems] = useState<ScrapbookItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
-
-  // Modal state
-  const [modal, setModal] = useState<{
-    mode: 'add' | 'edit' | 'connect'
-    member?: Member
-    sourceForConnect?: Member
-  } | null>(null)
-
-  // When user drags a new connection — ask them what relationship it is
-  const [pendingConnect, setPendingConnect] = useState<{
-    sourceId: string
-    targetId: string
-  } | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) router.replace('/login')
-      else setUserId(session.user.id)
+      if (!session) {
+        // Try refreshing session before giving up
+        supabase.auth.refreshSession().then(({ data }) => {
+          if (!data.session) { router.replace('/login'); return }
+          setUserId(data.session.user.id)
+        })
+        return
+      }
+      setUserId(session.user.id)
     })
   }, [router])
 
-  async function loadData() {
+  useEffect(() => {
+    if (!userId || !memberId) return
+    const supabase = createClient()
+    Promise.all([
+      supabase.from('members').select('*').eq('id', memberId).single(),
+      supabase.from('scrapbook_items').select('*').eq('member_id', memberId).order('created_at'),
+    ]).then(([{ data: memberData }, { data: itemsData }]) => {
+      setMember(memberData)
+      setItems(itemsData ?? [])
+      setLoading(false)
+    })
+  }, [userId, memberId])
+
+  // Debounced save of item positions/content
+  function scheduleItemSave(updatedItems: ScrapbookItem[]) {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaving(true)
+    saveTimer.current = setTimeout(async () => {
+      const supabase = createClient()
+      await Promise.all(updatedItems.map(item =>
+        supabase.from('scrapbook_items').update({
+          pos_x: item.pos_x, pos_y: item.pos_y,
+          content: item.content, caption: item.caption,
+          date_taken: item.date_taken,
+        }).eq('id', item.id)
+      ))
+      setSaving(false)
+    }, 1000)
+  }
+
+  function updateItem(id: string, patch: Partial<ScrapbookItem>) {
+    setItems(prev => {
+      const updated = prev.map(item => item.id === id ? { ...item, ...patch } : item)
+      scheduleItemSave(updated)
+      return updated
+    })
+  }
+
+  async function deleteItem(id: string) {
+    setItems(prev => prev.filter(i => i.id !== id))
+    const supabase = createClient()
+    await supabase.from('scrapbook_items').delete().eq('id', id)
+    setSelectedId(null)
+  }
+
+  async function addTextNote() {
     if (!userId) return
     const supabase = createClient()
-    const [{ data: membersData }, { data: relsData }] = await Promise.all([
-      supabase.from('members').select('*').eq('user_id', userId),
-      supabase.from('relationships').select('*').eq('user_id', userId),
-    ])
-    setMembers(membersData ?? [])
-    setRelationships(relsData ?? [])
-    setLoading(false)
+    const { data, error } = await supabase.from('scrapbook_items').insert({
+      member_id: memberId, user_id: userId,
+      type: 'text', content: '',
+      pos_x: 100 + Math.random() * 200, pos_y: 100 + Math.random() * 200,
+      width: 220, rotation: (Math.random() - 0.5) * 4,
+      caption: null, date_taken: null,
+    }).select().single()
+    if (data) { setItems(prev => [...prev, data]); setSelectedId(data.id) }
   }
 
-  useEffect(() => { if (userId) loadData() }, [userId])
-
-  useEffect(() => {
-    const newNodes: Node[] = members.map((m) => ({
-      id: m.id,
-      type: 'memberNode',
-      position: { x: m.position_x, y: m.position_y },
-      data: {
-        member: m,
-        onEdit: (member: Member) => setModal({ mode: 'edit', member }),
-        onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
-      },
-    }))
-    setNodes(newNodes)
-  }, [members])
-
-  // Build edges
-  const builtEdges: Edge[] = useMemo(() => {
-    return relationships.map((r) => {
-      const { isHorizontal, isSpouse, color, sourceHandle, targetHandle } = edgeStyle(r.relation_type)
-      return {
-        id: r.id,
-        source: r.source_id,
-        target: r.target_id,
-        sourceHandle,
-        targetHandle,
-        type: 'smoothstep',
-        className: `edge-${r.relation_type}`,
-        label: r.label ? r.label : isSpouse ? '♥' : '',
-        labelStyle: {
-          fill: isSpouse ? '#b06080' : '#b8a882',
-          fontFamily: 'Lora, serif',
-          fontSize: isSpouse ? 14 : 11,
-          fontStyle: 'italic',
-        },
-        labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
-        style: {
-          stroke: color,
-          strokeWidth: isSpouse ? 2 : 1.5,
-          strokeDasharray: isSpouse ? '6 3' : undefined,
-        },
-        markerEnd: !isHorizontal ? {
-          type: MarkerType.ArrowClosed,
-          color,
-          width: 14,
-          height: 14,
-        } : undefined,
-        animated: isSpouse,
-      }
-    })
-  }, [relationships])
-
-  useEffect(() => { setLocalEdges(builtEdges) }, [builtEdges])
-
-  const savePositions = useDebouncedCallback(
-    async (updatedNodes: Node[]) => {
-      setSaveStatus('saving')
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !userId) return
+    setUploading(true)
+    try {
+      const url = await uploadToCloudinary(file, `roots/${userId}/scrapbook/${memberId}`)
       const supabase = createClient()
-      await Promise.all(
-        updatedNodes.map((n) =>
-          supabase.from('members')
-            .update({ position_x: n.position.x, position_y: n.position.y })
-            .eq('id', n.id)
-        )
-      )
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 2000)
-    },
-    1200
-  )
-
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((nds) => {
-        const updated = applyNodeChanges(changes, nds)
-        const hasMoved = changes.some((c) => c.type === 'position' && c.dragging === false)
-        if (hasMoved) savePositions(updated)
-        return updated
-      })
-    },
-    [savePositions]
-  )
-
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    const removals = changes.filter((c) => c.type === 'remove')
-    if (removals.length > 0) {
-      const supabase = createClient()
-      const ids = removals.map((c) => c.id)
-      // Remove from local relationships state so loadData() won't restore them
-      setRelationships((prev) => prev.filter((r) => !ids.includes(r.id)))
-      // Delete from Supabase
-      ids.forEach((id) => {
-        supabase.from('relationships').delete().eq('id', id).then(({ error }) => {
-          if (error) console.error('Failed to delete relationship:', error)
-        })
-      })
+      const { data } = await supabase.from('scrapbook_items').insert({
+        member_id: memberId, user_id: userId,
+        type: 'photo', content: url,
+        pos_x: 100 + Math.random() * 300, pos_y: 80 + Math.random() * 200,
+        width: 200 + Math.random() * 80, rotation: (Math.random() - 0.5) * 6,
+        caption: null, date_taken: null,
+      }).select().single()
+      if (data) { setItems(prev => [...prev, data]); setSelectedId(data.id) }
+    } catch (err: any) {
+      console.error('Upload failed:', err.message)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
     }
-    setLocalEdges((eds) => applyEdgeChanges(changes, eds))
-  }, [])
-
-  // Called when user drags a new connection between two nodes
-  const onConnect = useCallback((connection: Connection) => {
-    if (!connection.source || !connection.target) return
-    // Open the connect modal to set relationship type, pre-filled with source
-    const sourceMember = members.find(m => m.id === connection.source)
-    if (sourceMember) {
-      setPendingConnect({ sourceId: connection.source, targetId: connection.target })
-      setModal({ mode: 'connect', sourceForConnect: sourceMember })
-    }
-  }, [members])
-
-  // After modal saves in pending-connect mode, we don't need extra logic
-  // because loadData() refreshes everything
-
-  async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
-
-  function handleModalSaved() {
-    setModal(null)
-    setPendingConnect(null)
-    loadData()
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen gap-3">
-        <div className="w-6 h-6 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
-        <span className="font-body text-[var(--parchment-dim)] italic">Growing your tree…</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f0c08', color: '#b8a882', fontFamily: 'Lora, serif', fontStyle: 'italic' }}>
+        Opening scrapbook…
       </div>
     )
   }
 
+  const photoItems = items.filter(i => i.type === 'photo').length
+  const textItems = items.filter(i => i.type === 'text').length
+
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#1a1208', position: 'relative', fontFamily: 'Lora, serif' }}>
+
+      {/* Texture overlay */}
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'400\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'400\' height=\'400\' filter=\'url(%23n)\' opacity=\'0.04\'/%3E%3C/svg%3E")', pointerEvents: 'none', zIndex: 0 }} />
+
       {/* Top bar */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-        display: 'flex', alignItems: 'center', padding: '12px 20px',
-        background: 'linear-gradient(to bottom, rgba(15,12,8,0.95) 0%, rgba(15,12,8,0) 100%)',
-        pointerEvents: 'none',
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
+        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px',
+        background: 'linear-gradient(to bottom, rgba(15,10,4,0.97) 0%, rgba(15,10,4,0) 100%)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
-          <TreePine size={22} color="#c49040" />
-          <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: '#f5edd8', fontWeight: 600 }}>
-            Roots
-          </span>
+        <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Lora, serif', fontSize: 13 }}>
+          <ArrowLeft size={16} /> Back to tree
+        </button>
+
+        <div style={{ width: 1, height: 20, background: '#3a3020' }} />
+
+        {/* Member info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {member?.photo_url && (
+            <img src={member.photo_url} alt={member?.name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '1px solid #c49040' }} />
+          )}
+          <div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, color: '#f5edd8', fontWeight: 600 }}>{member?.name}</div>
+            {(member?.birth_year || member?.death_year) && (
+              <div style={{ fontSize: 10, color: '#b8a882', fontFamily: 'DM Mono, monospace' }}>
+                {member?.birth_year ?? '?'}{member?.death_year ? ` – ${member.death_year}` : ''}
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{ flex: 1 }} />
-        {saveStatus !== 'idle' && (
-          <div style={{
-            pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 6,
-            color: '#b8a882', fontFamily: 'DM Mono, monospace', fontSize: 11, marginRight: 16,
-          }}>
-            <Save size={12} />
-            {saveStatus === 'saving' ? 'saving…' : '✓ saved'}
+
+        {/* Social links */}
+        {member?.social_links && member.social_links.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+            {member.social_links.map((link, i) => (
+              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'rgba(196,144,64,0.1)', border: '1px solid #3a3020', borderRadius: 6, color: '#b8a882', fontSize: 11, textDecoration: 'none' }}
+                title={link.url}>
+                <span>{SOCIAL_ICONS[link.type] ?? '🔗'}</span>
+                <span>{link.label || link.type}</span>
+                <ExternalLink size={9} />
+              </a>
+            ))}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
-          <button onClick={() => setModal({ mode: 'add' })} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8,
-            padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          }}>
-            <Plus size={14} /> Add member
-          </button>
-          <button onClick={handleSignOut} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: 'rgba(255,255,255,0.05)', color: '#b8a882',
-            border: '1px solid #3a3020', borderRadius: 8,
-            padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer',
-          }}>
-            <LogOut size={13} /> Sign out
-          </button>
-        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {saving && <span style={{ fontSize: 11, color: '#b8a882', fontFamily: 'DM Mono, monospace' }}>saving…</span>}
+
+        {/* Add buttons */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: '#c49040', border: 'none', borderRadius: 8, color: '#1a1208', fontFamily: 'Playfair Display, serif', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: uploading ? 0.5 : 1 }}
+        >
+          <ImageIcon size={13} /> {uploading ? 'Uploading…' : 'Add photo'}
+        </button>
+        <button
+          onClick={addTextNote}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'transparent', border: '1px solid #3a3020', borderRadius: 8, color: '#b8a882', fontFamily: 'Lora, serif', fontSize: 12, cursor: 'pointer' }}
+        >
+          <Type size={13} /> Add note
+        </button>
+        <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handlePhotoUpload} />
       </div>
 
-      {/* Empty state */}
-      {members.length <= 1 && !loading && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', zIndex: 5, pointerEvents: 'none',
-        }}>
-          <p style={{
-            fontFamily: 'Playfair Display, serif', fontStyle: 'italic',
-            color: '#b8a882', fontSize: 15, textAlign: 'center', maxWidth: 300, lineHeight: 1.7,
-          }}>
-            Your tree begins with you.<br />
-            <span style={{ fontSize: 12 }}>
-              Double-click your card to edit, or drag from a dot to connect two people.
-            </span>
-          </p>
-        </div>
-      )}
-
-      <ReactFlow
-        nodes={nodes}
-        edges={localEdges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.3 }}
-        defaultEdgeOptions={{ type: 'smoothstep' }}
-        proOptions={{ hideAttribution: true }}
-        connectionLineStyle={{ stroke: '#c49040', strokeWidth: 1.5 }}
-        connectionLineType={'smoothstep' as any}
+      {/* Canvas — scrollable */}
+      <div
+        style={{ position: 'absolute', inset: 0, overflow: 'auto', paddingTop: 60 }}
+        onClick={() => setSelectedId(null)}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(196,144,64,0.15)" />
-        <Controls position="bottom-right" style={{ bottom: 24, right: 24 }} />
-        <MiniMap
-          position="bottom-left"
-          style={{ bottom: 24, left: 24 }}
-          nodeColor={(n) => (n.data as { member: Member }).member?.is_root ? '#c49040' : '#3a3020'}
-          maskColor="rgba(15,12,8,0.8)"
-        />
-      </ReactFlow>
+        <div style={{ position: 'relative', width: 1600, height: 1200, minWidth: '100%', minHeight: '100%' }}>
+          {/* Cork/paper background */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse at 30% 20%, #2a1f0e 0%, #1a1208 60%, #0f0c08 100%)',
+          }} />
 
-      {/* Legend */}
-      <div style={{
-        position: 'absolute', top: 70, right: 16, zIndex: 10,
-        background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020',
-        borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(8px)',
-        minWidth: 160,
-      }}>
-        <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-          Legend
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#c49040', fontSize: 16, lineHeight: 1 }}>→</span>
-            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#c49040' }}>Parent → Child</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#b06080', fontSize: 14, lineHeight: 1 }}>♥</span>
-            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b06080' }}>Spouse</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#507090', fontSize: 16, lineHeight: 1 }}>—</span>
-            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#507090' }}>Sibling</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#607060', fontSize: 16, lineHeight: 1 }}>—</span>
-            <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#607060' }}>Other</span>
-          </div>
-        </div>
-        <div style={{ borderTop: '1px solid #3a3020', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>💡 Double-click card to edit</span>
-          <span style={{ fontFamily: 'Lora, serif', fontSize: 10, color: '#b8a882', fontStyle: 'italic' }}>✦ Drag from a dot to connect</span>
+          {/* Empty state */}
+          {items.length === 0 && (
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>📸</div>
+              <p style={{ fontFamily: 'Playfair Display, serif', fontStyle: 'italic', color: '#b8a882', fontSize: 16, lineHeight: 1.7 }}>
+                {member?.name}'s scrapbook is empty.<br />
+                <span style={{ fontSize: 13 }}>Add photos or notes using the buttons above.</span>
+              </p>
+            </div>
+          )}
+
+          {/* Items */}
+          {items.map(item => (
+            <ScrapItem
+              key={item.id}
+              item={item}
+              onUpdate={updateItem}
+              onDelete={deleteItem}
+              selected={selectedId === item.id}
+              onSelect={setSelectedId}
+            />
+          ))}
         </div>
       </div>
 
-      {modal && userId && (
-        <MemberModal
-          mode={modal.mode}
-          member={modal.member}
-          sourceForConnect={modal.sourceForConnect}
-          userId={userId}
-          onClose={() => { setModal(null); setPendingConnect(null) }}
-          onSaved={handleModalSaved}
-          pendingTargetId={pendingConnect?.targetId}
-        />
+      {/* Bottom info bar */}
+      {items.length > 0 && (
+        <div style={{ position: 'absolute', bottom: 16, right: 20, zIndex: 20, fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#b8a882' }}>
+          {photoItems} photo{photoItems !== 1 ? 's' : ''} · {textItems} note{textItems !== 1 ? 's' : ''}
+          {selectedId && <span style={{ marginLeft: 12, color: '#c49040' }}>· click elsewhere to deselect</span>}
+        </div>
       )}
     </div>
   )
