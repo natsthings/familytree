@@ -13,6 +13,7 @@ interface MemberModalProps {
   sourceForConnect?: Member | null
   userId: string
   isAdmin?: boolean
+  privateMode?: boolean
   onClose: () => void
   onSaved: (deletedMemberId?: string) => void
   onRequestDelete?: (targetId: string, description: string) => void
@@ -30,7 +31,7 @@ const SOCIAL_TYPES = [
 ]
 
 export default function MemberModal({
-  mode, member, sourceForConnect, userId, isAdmin = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers,
+  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers,
 }: MemberModalProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -48,6 +49,8 @@ export default function MemberModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [privateNote, setPrivateNote] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
 
   const isDragConnect = !!pendingTargetId
   const [connectTo, setConnectTo] = useState<'new' | 'existing'>(isDragConnect ? 'existing' : 'new')
@@ -119,6 +122,16 @@ export default function MemberModal({
           is_root: false,
           position_x: Math.random() * 400 - 200,
           position_y: Math.random() * 400 - 200,
+        })
+        if (error) throw error
+      } else if (mode === 'connect' && privateMode) {
+        // Save to private relationships only
+        const { error } = await supabase.from('private_relationships').insert({
+          user_id: userId,
+          source_id: sourceForConnect!.id,
+          target_id: targetId,
+          relation_type: relationType,
+          label: relationType === 'other' && customLabel ? customLabel : null,
         })
         if (error) throw error
       } else if (mode === 'connect') {
@@ -352,6 +365,29 @@ export default function MemberModal({
                   <Plus size={12} /> Add contact info (Facebook, address…)
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Private note — only shown in private mode, edit only */}
+          {mode === 'edit' && member && privateMode && (
+            <div>
+              <label style={{ ...labelStyle, color: '#a060a0' }}>🔒 Private note (only you see this)</label>
+              <textarea
+                value={privateNote}
+                onChange={e => setPrivateNote(e.target.value)}
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical', fontStyle: 'italic' }}
+                placeholder="Private thoughts, notes, context…"
+              />
+              <button onClick={async () => {
+                setSavingNote(true)
+                const { createClient: cc } = await import('@/lib/supabase')
+                const supabase = cc()
+                await supabase.from('private_notes').upsert({ user_id: userId, member_id: member.id, note: privateNote }, { onConflict: 'user_id,member_id' })
+                setSavingNote(false)
+              }} style={{ marginTop: 6, padding: '5px 12px', background: 'rgba(160,96,160,0.2)', border: '1px solid #806080', borderRadius: 6, color: '#d090d0', fontFamily: 'Lora, serif', fontSize: 12, cursor: 'pointer' }}>
+                {savingNote ? 'Saving…' : 'Save note'}
+              </button>
             </div>
           )}
 
