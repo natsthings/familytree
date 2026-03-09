@@ -24,7 +24,7 @@ Each person has a Scrapbook — double-click their card, then click "Open Scrapb
 
 Oh, and the family code? 66 61 6D 69 6C 79. That's "family" in hexadecimal. Nerdy, I know. 🤓
 
-Take care of this. It's ours.
+
 
 Nat ♡`
 
@@ -46,7 +46,7 @@ Cada persona tiene un Álbum de recortes (Scrapbook) — haz doble clic en su ta
 
 Ah, y el código familiar: 66 61 6D 69 6C 79. Eso es "family" (familia) en hexadecimal. Muy nerd, lo sé. 🤓
 
-Cuídenlo. Es nuestro.
+
 
 Nat ♡`
 
