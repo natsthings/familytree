@@ -29,7 +29,7 @@ export interface Relationship {
   user_id: string
   source_id: string
   target_id: string
-  relation_type: 'parent' | 'child' | 'spouse' | 'sibling' | 'other'
+  relation_type: 'parent' | 'child' | 'spouse' | 'sibling' | 'step_sibling' | 'other'
   label: string | null
   created_at: string
 }
@@ -41,6 +41,7 @@ export const RELATION_LABELS: Record<RelationType, string> = {
   child: 'Child',
   spouse: 'Spouse / Partner',
   sibling: 'Sibling',
+  step_sibling: 'Step-Sibling',
   other: 'Other',
 }
 
