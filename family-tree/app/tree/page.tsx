@@ -161,9 +161,14 @@ export default function TreePage() {
   useEffect(() => {
     if (!userId) return
     const supabase = createClient()
-    supabase.from('messages').select('id', { count: 'exact' })
-      .eq('recipient_id', userId).eq('read', false)
-      .then(({ count }) => setUnreadCount(count ?? 0))
+    function refreshUnread() {
+      supabase.from('messages').select('id', { count: 'exact' })
+        .eq('recipient_id', userId!).eq('read', false)
+        .then(({ count }) => setUnreadCount(count ?? 0))
+    }
+    refreshUnread()
+    window.addEventListener('messages-read', refreshUnread)
+    return () => window.removeEventListener('messages-read', refreshUnread)
   }, [userId])
 
   useEffect(() => {
