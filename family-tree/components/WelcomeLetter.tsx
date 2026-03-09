@@ -29,7 +29,6 @@ Oh, and the family code? 66 61 6D 69 6C 79. That's "family" in hexadecimal. Nerd
 Nat ♡`
 
 const LETTER_ES = `
-
 Bienvenidos a Roots — nuestro árbol genealógico, hecho con amor (y mucho código).
 
 Algunas cosas importantes antes de empezar:
