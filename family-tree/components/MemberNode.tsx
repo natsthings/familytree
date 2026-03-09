@@ -37,7 +37,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         border: selected
           ? '2px solid #e0b060'
           : isPrivate ? '1px solid #806080'
-          : isMyProfile ? '2px solid #c49040'
+          : isMyProfile ? '1px solid #6a5030'
           : isClaimed ? '1px solid #507040'
           : '1px solid #3a3020',
         borderRadius: '12px',
@@ -47,6 +47,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         cursor: 'pointer',
         boxShadow: selected
           ? '0 0 20px rgba(196,144,64,0.3)'
+          : isMyProfile ? '0 2px 8px rgba(0,0,0,0.4)'
           : member.is_root ? '0 4px 20px rgba(196,144,64,0.15)' : '0 2px 8px rgba(0,0,0,0.4)',
         transition: 'all 0.2s ease',
         opacity: isDeceased ? 0.8 : 1,
