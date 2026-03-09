@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import ReactFlow, {
   Background, Controls, MiniMap,
@@ -349,40 +350,43 @@ export default function TreePage() {
         </div>
       </div>
 
-      {modal && userId && (
-        <MemberModal
-          mode={modal.mode}
-          member={modal.member}
-          sourceForConnect={modal.sourceForConnect}
-          userId={userId}
-          isAdmin={isAdmin}
-          onClose={() => { setModal(null); setPendingConnect(null) }}
-          onSaved={(deletedId) => handleModalSaved(deletedId)}
-          onRequestDelete={(targetId, description) => setDeleteRequest({ targetType: 'member', targetId, description })}
-          pendingTargetId={pendingConnect?.targetId}
-          allMembers={members}
-        />
-      )}
-
-      {deleteRequest && userId && (
-        <DeleteRequestModal
-          userId={userId}
-          requesterName={userName || userEmail || 'Unknown'}
-          targetType={deleteRequest.targetType}
-          targetId={deleteRequest.targetId}
-          targetDescription={deleteRequest.description}
-          onClose={() => setDeleteRequest(null)}
-        />
-      )}
-
-      {messageBox && userId && (
-        <MessageBox
-          memberId={messageBox.memberId}
-          memberName={messageBox.memberName}
-          currentUserId={userId}
-          currentUserName={userName || userEmail || 'Someone'}
-          onClose={() => setMessageBox(null)}
-        />
+      {typeof document !== 'undefined' && createPortal(
+        <>
+          {modal && userId && (
+            <MemberModal
+              mode={modal.mode}
+              member={modal.member}
+              sourceForConnect={modal.sourceForConnect}
+              userId={userId}
+              isAdmin={isAdmin}
+              onClose={() => { setModal(null); setPendingConnect(null) }}
+              onSaved={(deletedId) => handleModalSaved(deletedId)}
+              onRequestDelete={(targetId, description) => setDeleteRequest({ targetType: 'member', targetId, description })}
+              pendingTargetId={pendingConnect?.targetId}
+              allMembers={members}
+            />
+          )}
+          {deleteRequest && userId && (
+            <DeleteRequestModal
+              userId={userId}
+              requesterName={userName || userEmail || 'Unknown'}
+              targetType={deleteRequest.targetType}
+              targetId={deleteRequest.targetId}
+              targetDescription={deleteRequest.description}
+              onClose={() => setDeleteRequest(null)}
+            />
+          )}
+          {messageBox && userId && (
+            <MessageBox
+              memberId={messageBox.memberId}
+              memberName={messageBox.memberName}
+              currentUserId={userId}
+              currentUserName={userName || userEmail || 'Someone'}
+              onClose={() => setMessageBox(null)}
+            />
+          )}
+        </>,
+        document.body
       )}
     </div>
   )
