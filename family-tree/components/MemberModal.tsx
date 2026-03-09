@@ -104,26 +104,18 @@ export default function MemberModal({
     const supabase = createClient()
     try {
       if (mode === 'edit' && member) {
-        const isOwnMember = member.user_id === userId
-        if (isOwnMember || isAdmin) {
-          // Owner or admin can update everything
-          const { error } = await supabase.from('members').update({
-            name, photo_url: photoUrl || null,
-            birth_date: birthDate || null,
-            death_date: deathDate || null,
-            birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
-            death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
-            social_links: socialLinks.filter(l => l.url.trim()),
-          }).eq('id', member.id)
-          if (error) throw error
-        } else {
-          // Others can update social_links via security-definer RPC
-          const { error } = await supabase.rpc('set_social_links', {
-            member_id: member.id,
-            new_links: JSON.parse(JSON.stringify(socialLinks.filter(l => l.url.trim()))),
-          })
-          if (error) throw error
-        }
+        // Always use RPCs so we bypass RLS restrictions
+        const { error: nameError } = await supabase.rpc('update_member_details', {
+          p_member_id: member.id,
+          p_name: name,
+          p_photo_url: photoUrl || null,
+          p_birth_date: birthDate || null,
+          p_death_date: deathDate || null,
+          p_birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
+          p_death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
+          p_social_links: JSON.parse(JSON.stringify(socialLinks.filter(l => l.url.trim()))),
+        })
+        if (nameError) throw nameError
       } else if (mode === 'add') {
         const table = privateMode ? 'private_members' : 'members'
         const { error } = await supabase.from(table as any).insert({
