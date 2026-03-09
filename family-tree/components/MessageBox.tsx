@@ -83,6 +83,10 @@ export default function MessageBox({ currentUserId, currentUserName, toUserId, t
         // Mark received messages as read
         supabase.from('messages').update({ read: true })
           .eq('recipient_id', currentUserId).eq('sender_id', activeUserId).eq('read', false)
+          .then(() => {
+            // Notify parent to refresh unread count
+            if (typeof window !== 'undefined') window.dispatchEvent(new Event('messages-read'))
+          })
       })
 
     // Realtime
