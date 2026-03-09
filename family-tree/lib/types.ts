@@ -12,12 +12,14 @@ export interface Member {
   position_x: number
   position_y: number
   social_links: SocialLink[] | null
+  claimed_by: string | null
+  is_admin: boolean
   created_at: string
   updated_at: string
 }
 
 export interface SocialLink {
-  type: 'facebook' | 'instagram' | 'obituary' | 'website' | 'other'
+  type: 'facebook' | 'instagram' | 'obituary' | 'address' | 'website' | 'other'
   label: string
   url: string
 }
