@@ -357,7 +357,7 @@ export default function MemberModal({
           {/* Open scrapbook button — edit mode only */}
           {mode === 'edit' && member && (
             <button
-              onClick={() => { onClose(); router.push(`/scrapbook/${member.id}`) }}
+              onClick={() => { router.push(`/scrapbook/${member.id}`); onClose() }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 padding: '10px', borderRadius: 8,
