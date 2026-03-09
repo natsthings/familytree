@@ -145,7 +145,7 @@ export default function TreePage() {
       type: 'memberNode',
       position: { x: m.position_x, y: m.position_y },
       data: {
-        member: m,
+        member: { ...m, _isPrivate: privateMemberIds.has(m.id) },
         currentUserId: userId,
         isAdmin,
         onEdit: (member: Member) => setModal({ mode: 'edit', member }),
@@ -412,6 +412,7 @@ export default function TreePage() {
               sourceForConnect={modal.sourceForConnect}
               userId={userId}
               isAdmin={isAdmin}
+              privateMode={privateMode}
               onClose={() => { setModal(null); setPendingConnect(null) }}
               onSaved={(deletedId) => handleModalSaved(deletedId)}
               onRequestDelete={(targetId, description) => setDeleteRequest({ targetType: 'member', targetId, description })}
