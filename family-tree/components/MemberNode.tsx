@@ -71,7 +71,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           background: member.is_root
             ? 'linear-gradient(135deg, #c49040, #8a6020)'
             : 'linear-gradient(135deg, #3a3020, #252015)',
-          border: `2px solid ${member.is_root ? '#c49040' : 'transparent'}`,
+          border: member.is_root ? '2px solid #c49040' : 'none',
           margin: '0 auto 8px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, flexShrink: 0,
@@ -124,9 +124,16 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         {/* Social link indicators */}
         {member.social_links && member.social_links.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: 3, marginTop: 5, flexWrap: 'wrap' }}>
-            {member.social_links.slice(0, 4).map((link, i) => (
+            {member.social_links.slice(0, 5).map((link, i) => (
               <span key={i} style={{ fontSize: 9, opacity: 0.7 }}>
-                {link.type === 'facebook' ? '📘' : link.type === 'instagram' ? '📷' : link.type === 'obituary' ? '🕯️' : '🔗'}
+                {link.type === 'phone' ? '📞'
+                  : link.type === 'email' ? '✉️'
+                  : link.type === 'address' ? '🏠'
+                  : link.type === 'facebook' ? '📘'
+                  : link.type === 'instagram' ? '📷'
+                  : link.type === 'obituary' ? '🕯️'
+                  : link.type === 'website' ? '🌐'
+                  : '🔗'}
               </span>
             ))}
           </div>
