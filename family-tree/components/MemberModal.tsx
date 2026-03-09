@@ -112,14 +112,15 @@ export default function MemberModal({
         }).eq('id', member.id)
         if (error) throw error
       } else if (mode === 'add') {
-        const { error } = await supabase.from('members').insert({
+        const table = privateMode ? 'private_members' : 'members'
+        const { error } = await supabase.from(table as any).insert({
           user_id: userId, name, photo_url: photoUrl || null,
           birth_date: birthDate || null,
           death_date: deathDate || null,
           birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
           death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
           social_links: socialLinks.filter(l => l.url.trim()),
-          is_root: false,
+          ...(privateMode ? {} : { is_root: false }),
           position_x: Math.random() * 400 - 200,
           position_y: Math.random() * 400 - 200,
         })
@@ -127,14 +128,15 @@ export default function MemberModal({
       } else if (mode === 'connect') {
         let targetId = selectedExistingId
         if (connectTo === 'new') {
-          const { data: newMember, error: memberError } = await supabase.from('members').insert({
+          const memberTable = privateMode ? 'private_members' : 'members'
+          const { data: newMember, error: memberError } = await supabase.from(memberTable as any).insert({
             user_id: userId, name, photo_url: photoUrl || null,
             birth_date: birthDate || null,
             death_date: deathDate || null,
             birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
             death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
             social_links: [],
-            is_root: false,
+            ...(privateMode ? {} : { is_root: false }),
             position_x: (sourceForConnect?.position_x ?? 0) + (Math.random() * 200 - 100),
             position_y: (sourceForConnect?.position_y ?? 0) + 180,
           }).select().single()
@@ -161,11 +163,15 @@ export default function MemberModal({
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const { error } = await supabase.rpc('delete_member', { member_id: member.id })
-    if (error) {
-      setError('Delete failed: ' + error.message)
-      setLoading(false)
-      return
+    const isPrivateMember = !!(member as any)._isPrivate
+    if (isPrivateMember) {
+      // Delete from private tables only
+      await supabase.from('private_relationships').delete().or(`source_id.eq.${member.id},target_id.eq.${member.id}`)
+      const { error } = await supabase.from('private_members').delete().eq('id', member.id)
+      if (error) { setError('Delete failed: ' + error.message); setLoading(false); return }
+    } else {
+      const { error } = await supabase.rpc('delete_member', { member_id: member.id })
+      if (error) { setError('Delete failed: ' + error.message); setLoading(false); return }
     }
     onSaved(member.id)
   }
