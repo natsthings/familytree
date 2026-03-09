@@ -7,8 +7,7 @@ interface WelcomeLetterProps {
   onClose: () => void
 }
 
-const LETTER_EN = `Hola familia,
-
+const LETTER_EN = `
 Welcome to Roots — our family tree, built with love (and a lot of code).
 
 A few things to know before you dive in:
@@ -27,10 +26,9 @@ Oh, and the family code? 66 61 6D 69 6C 79. That's "family" in hexadecimal. Nerd
 
 Take care of this. It's ours.
 
-Con amor,
 Nat ♡`
 
-const LETTER_ES = `Hola familia,
+const LETTER_ES = `
 
 Bienvenidos a Roots — nuestro árbol genealógico, hecho con amor (y mucho código).
 
@@ -50,7 +48,6 @@ Ah, y el código familiar: 66 61 6D 69 6C 79. Eso es "family" (familia) en hexad
 
 Cuídenlo. Es nuestro.
 
-Con amor,
 Nat ♡`
 
 export default function WelcomeLetter({ onClose }: WelcomeLetterProps) {
