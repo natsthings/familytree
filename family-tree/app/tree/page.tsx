@@ -140,7 +140,11 @@ export default function TreePage() {
   useEffect(() => { if (userId) loadData() }, [userId])
 
   useEffect(() => {
-    const newNodes: Node[] = members.map((m) => ({
+    const visibleMembers = members.filter(m =>
+      // In public mode, hide private members
+      privateMode ? true : !privateMemberIds.has(m.id)
+    )
+    const newNodes: Node[] = visibleMembers.map((m) => ({
       id: m.id,
       type: 'memberNode',
       position: { x: m.position_x, y: m.position_y },
@@ -154,7 +158,7 @@ export default function TreePage() {
       },
     }))
     setNodes(newNodes)
-  }, [members, userId, isAdmin, privateMemberIds])
+  }, [members, userId, isAdmin, privateMemberIds, privateMode])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
