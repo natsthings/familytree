@@ -67,12 +67,13 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         {/* Avatar */}
         <div style={{
           width: 48, height: 48, borderRadius: '50%',
+          overflow: 'hidden',
           background: member.is_root
             ? 'linear-gradient(135deg, #c49040, #8a6020)'
             : 'linear-gradient(135deg, #3a3020, #252015)',
           border: `2px solid ${member.is_root ? '#c49040' : 'transparent'}`,
           margin: '0 auto 8px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, flexShrink: 0,
         }}>
           {member.photo_url ? (
