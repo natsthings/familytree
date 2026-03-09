@@ -50,7 +50,6 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           : member.is_root ? '0 4px 20px rgba(196,144,64,0.15)' : '0 2px 8px rgba(0,0,0,0.4)',
         transition: 'all 0.2s ease',
         opacity: isDeceased ? 0.8 : 1,
-        position: 'relative',
       }}
       onDoubleClick={() => onEdit(member)}
     >
