@@ -91,17 +91,12 @@ export default function TreePage() {
   async function loadData() {
     if (!userId) return
     const supabase = createClient()
-    const queries: Promise<any>[] = [
+
+    const [{ data: membersData }, { data: relsData }, { data: myPositions }] = await Promise.all([
       supabase.from('members').select('*').order('name'),
       supabase.from('relationships').select('*'),
       supabase.from('member_positions').select('*').eq('user_id', userId),
-    ]
-    if (isAdmin) {
-      queries.push(supabase.from('private_notes').select('*').eq('user_id', userId))
-      queries.push(supabase.from('private_relationships').select('*').eq('user_id', userId))
-    }
-    const results = await Promise.all(queries)
-    const [{ data: membersData }, { data: relsData }, { data: myPositions }] = results
+    ])
 
     const allMembers = (membersData ?? []).map((m: any) => {
       const myPos = myPositions?.find((p: any) => p.member_id === m.id)
@@ -111,11 +106,15 @@ export default function TreePage() {
     setMembers(allMembers)
     setRelationships(relsData ?? [])
 
-    if (isAdmin && results[3] && results[4]) {
+    if (isAdmin) {
+      const [{ data: notesData }, { data: privateRelsData }] = await Promise.all([
+        supabase.from('private_notes').select('*').eq('user_id', userId),
+        supabase.from('private_relationships').select('*').eq('user_id', userId),
+      ])
       const notesMap: Record<string, string> = {}
-      ;(results[3].data ?? []).forEach((n: any) => { notesMap[n.member_id] = n.note })
+      ;(notesData ?? []).forEach((n: any) => { notesMap[n.member_id] = n.note })
       setPrivateNotes(notesMap)
-      setPrivateRelationships(results[4].data ?? [])
+      setPrivateRelationships(privateRelsData ?? [])
     }
 
     const myProfile = allMembers.find((m: any) => m.claimed_by === userId)
