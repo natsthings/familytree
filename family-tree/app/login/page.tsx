@@ -37,7 +37,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         <div className="text-center mb-10">
           <div className="text-5xl mb-4">🌳</div>
-          <h1 className="font-display text-4xl text-[var(--parchment)] mb-2">Roots</h1>
+          <h1 className="font-display text-4xl text-[var(--parchment)] mb-2">Roots - I hope you wrote down your password</h1>
           <p className="text-[var(--parchment-dim)] font-body italic text-sm">Roots</p>
         </div>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8">
