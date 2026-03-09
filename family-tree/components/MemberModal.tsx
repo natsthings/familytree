@@ -151,7 +151,8 @@ export default function MemberModal({
           if (memberError || !newMember) throw memberError
           targetId = newMember.id
         }
-        const { error: relError } = await supabase.from('relationships').insert({
+        const relTable = privateMode ? 'private_relationships' : 'relationships'
+        const { error: relError } = await supabase.from(relTable as any).insert({
           user_id: userId, source_id: sourceForConnect!.id, target_id: targetId,
           relation_type: relationType, label: customLabel || null,
         })
