@@ -30,6 +30,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
     <div
       className="member-node-wrap"
       style={{
+        position: 'relative',
         background: member.is_root
           ? 'linear-gradient(135deg, #3a2c10 0%, #2c1f0e 100%)'
           : 'linear-gradient(135deg, #1e1a12 0%, #16120c 100%)',
@@ -71,8 +72,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
             : 'linear-gradient(135deg, #3a3020, #252015)',
           border: `2px solid ${member.is_root ? '#c49040' : '#3a3020'}`,
           margin: '0 auto 8px',
-          overflow: 'hidden',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, flexShrink: 0,
         }}>
           {member.photo_url ? (
