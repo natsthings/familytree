@@ -12,9 +12,12 @@ interface MemberModalProps {
   member?: Member | null
   sourceForConnect?: Member | null
   userId: string
+  isAdmin?: boolean
   onClose: () => void
   onSaved: (deletedMemberId?: string) => void
+  onRequestDelete?: (targetId: string, description: string) => void
   pendingTargetId?: string
+  allMembers?: Member[]
 }
 
 const SOCIAL_TYPES = [
@@ -26,7 +29,7 @@ const SOCIAL_TYPES = [
 ]
 
 export default function MemberModal({
-  mode, member, sourceForConnect, userId, onClose, onSaved, pendingTargetId,
+  mode, member, sourceForConnect, userId, isAdmin = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers,
 }: MemberModalProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -371,13 +374,23 @@ export default function MemberModal({
         {/* Actions */}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
           {mode === 'edit' && member && !member.is_root && (
-            <button onClick={() => setShowDeleteConfirm(true)} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8,
-              border: '1px solid rgba(139,32,32,0.5)', background: 'rgba(139,32,32,0.15)',
-              color: '#f87171', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13,
-            }}>
-              <Trash2 size={14} /> Remove
-            </button>
+            isAdmin ? (
+              <button onClick={() => setShowDeleteConfirm(true)} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8,
+                border: '1px solid rgba(139,32,32,0.5)', background: 'rgba(139,32,32,0.15)',
+                color: '#f87171', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13,
+              }}>
+                <Trash2 size={14} /> Remove
+              </button>
+            ) : (
+              <button onClick={() => { onClose(); onRequestDelete?.(member.id, member.name) }} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 8,
+                border: '1px solid rgba(196,144,64,0.3)', background: 'rgba(196,144,64,0.08)',
+                color: '#c49040', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13,
+              }}>
+                <Trash2 size={14} /> Request removal
+              </button>
+            )
           )}
           <div style={{ flex: 1 }} />
           <button onClick={onClose} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #3a3020', background: 'transparent', color: '#b8a882', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13 }}>
