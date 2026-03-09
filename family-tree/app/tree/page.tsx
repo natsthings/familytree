@@ -65,7 +65,9 @@ export default function TreePage() {
   const [showWelcome, setShowWelcome] = useState(false)
   const [edgeTooltip, setEdgeTooltip] = useState<{ x: number; y: number; label: string } | null>(null)
   const [deleteRequest, setDeleteRequest] = useState<{ targetType: 'member' | 'relationship'; targetId: string; description: string } | null>(null)
-  const [messageBox, setMessageBox] = useState<{ memberId: string; memberName: string } | null>(null)
+  const [messageBox, setMessageBox] = useState<{ toUserId: string; toUserName: string } | null>(null)
+  const [showInbox, setShowInbox] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [deleteRequests, setDeleteRequests] = useState<any[]>([])
 
@@ -157,6 +159,14 @@ export default function TreePage() {
   useEffect(() => { if (userId) loadData() }, [userId])
 
   useEffect(() => {
+    if (!userId) return
+    const supabase = createClient()
+    supabase.from('messages').select('id', { count: 'exact' })
+      .eq('recipient_id', userId).eq('read', false)
+      .then(({ count }) => setUnreadCount(count ?? 0))
+  }, [userId])
+
+  useEffect(() => {
     const visibleMembers = members.filter(m =>
       // In public mode, hide private members
       privateMode ? true : !privateMemberIds.has(m.id)
@@ -173,7 +183,7 @@ export default function TreePage() {
         isAdmin,
         onEdit: (member: Member) => setModal({ mode: 'edit', member }),
         onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
-        onMessage: (m: Member) => setMessageBox({ memberId: m.id, memberName: m.name }),
+        onMessage: (m: Member) => { if (m.claimed_by) setMessageBox({ toUserId: m.claimed_by, toUserName: m.name }) },
       },
     }))
     setNodes(newNodes)
@@ -402,6 +412,14 @@ export default function TreePage() {
           <button onClick={() => setShowWelcome(true)} title="Read welcome letter" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
             <Mail size={13} />
           </button>
+          <button onClick={() => setShowInbox(true)} title="Messages" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+            💬
+            {unreadCount > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, background: '#c49040', color: '#1a1208', borderRadius: '50%', width: 16, height: 16, fontSize: 9, fontFamily: 'DM Mono, monospace', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {unreadCount}
+              </span>
+            )}
+          </button>
           {isAdmin && (
             <button onClick={() => { setShowRequestsPanel(true); loadDeleteRequests() }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
               📋 Requests
@@ -533,13 +551,13 @@ export default function TreePage() {
               </div>
             </div>
           )}
-          {messageBox && userId && (
+          {(showInbox || messageBox) && userId && (
             <MessageBox
-              memberId={messageBox.memberId}
-              memberName={messageBox.memberName}
               currentUserId={userId}
               currentUserName={userName || userEmail || 'Someone'}
-              onClose={() => setMessageBox(null)}
+              toUserId={messageBox?.toUserId}
+              toUserName={messageBox?.toUserName}
+              onClose={() => { setShowInbox(false); setMessageBox(null) }}
             />
           )}
         </>,
