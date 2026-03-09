@@ -54,6 +54,7 @@ export default function TreePage() {
   const [privateNotes, setPrivateNotes] = useState<Record<string, string>>({})
   const [privateRelationships, setPrivateRelationships] = useState<Relationship[]>([])
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
+  const privatePosCache = useRef<Record<string, { x: number; y: number }>>({})
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -160,7 +161,9 @@ export default function TreePage() {
     const newNodes: Node[] = visibleMembers.map((m) => ({
       id: m.id,
       type: 'memberNode',
-      position: { x: m.position_x, y: m.position_y },
+      position: privateMemberIds.has(m.id) && privatePosCache.current[m.id]
+        ? { x: privatePosCache.current[m.id].x, y: privatePosCache.current[m.id].y }
+        : { x: m.position_x, y: m.position_y },
       data: {
         member: { ...m, _isPrivate: privateMemberIds.has(m.id) },
         currentUserId: userId,
@@ -251,10 +254,18 @@ export default function TreePage() {
     setNodes((nds) => {
       const updated = applyNodeChanges(changes, nds)
       const hasMoved = changes.some((c) => c.type === 'position' && c.dragging === false)
-      if (hasMoved) savePositions(updated)
+      if (hasMoved) {
+        // Cache positions for private members so toggling modes doesn't reset them
+        updated.forEach(n => {
+          if (privateMemberIds.has(n.id)) {
+            privatePosCache.current[n.id] = { x: n.position.x, y: n.position.y }
+          }
+        })
+        savePositions(updated)
+      }
       return updated
     })
-  }, [savePositions])
+  }, [savePositions, privateMemberIds])
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     const removals = changes.filter((c) => c.type === 'remove')
