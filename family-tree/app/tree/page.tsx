@@ -217,7 +217,7 @@ export default function TreePage() {
         label: r.label ? r.label : isSpouse ? '♥' : '',
         labelStyle: { fill: isSpouse ? '#b06080' : '#b8a882', fontFamily: 'Lora, serif', fontSize: isSpouse ? 14 : 11, fontStyle: 'italic' },
         labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
-        style: { stroke: color, strokeWidth: isSpouse ? 2 : 1.5, strokeDasharray: isSpouse ? '6 3' : undefined },
+        style: { stroke: color, strokeWidth: isSpouse ? 2 : 1.5, strokeDasharray: isSpouse ? '6 3' : r.relation_type === 'step_sibling' ? '5 4' : undefined },
         markerEnd: !isHorizontal ? { type: MarkerType.ArrowClosed, color, width: 14, height: 14 } : undefined,
         animated: isSpouse,
       }
