@@ -5,9 +5,12 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { Member } from '@/lib/types'
 
 interface MemberNodeData {
-  member: Member
+  member: Member & { _isPrivate?: boolean }
+  currentUserId: string | null
+  isAdmin: boolean
   onEdit: (member: Member) => void
   onConnect: (member: Member) => void
+  onMessage: (member: Member) => void
 }
 
 const handleStyle = {
@@ -17,8 +20,11 @@ const handleStyle = {
 }
 
 function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
-  const { member, onEdit, onConnect } = data
+  const { member, currentUserId, isAdmin, onEdit, onConnect, onMessage } = data
   const isDeceased = !!member.death_year
+  const isClaimed = !!member.claimed_by
+  const isMyProfile = member.claimed_by === currentUserId
+  const isPrivate = !!(member as any)._isPrivate
 
   return (
     <div
@@ -29,7 +35,10 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           : 'linear-gradient(135deg, #1e1a12 0%, #16120c 100%)',
         border: selected
           ? '2px solid #e0b060'
-          : member.is_root ? '2px solid #c49040' : '1px solid #3a3020',
+          : isPrivate ? '1px solid #806080'
+          : isMyProfile ? '2px solid #c49040'
+          : isClaimed ? '1px solid #507040'
+          : '1px solid #3a3020',
         borderRadius: '12px',
         padding: '12px 16px',
         minWidth: '160px',
@@ -54,7 +63,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         style={{ ...handleStyle, right: -6, top: '50%', transform: 'translateY(-50%)' }} />
 
       <div style={{ textAlign: 'center' }}>
-        {/* Avatar — photo or placeholder */}
+        {/* Avatar */}
         <div style={{
           width: 48, height: 48, borderRadius: '50%',
           background: member.is_root
@@ -81,6 +90,17 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         }}>
           {member.name}
         </div>
+
+        {isPrivate && (
+          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#a060a0', marginBottom: 2 }}>
+            🔒 private
+          </div>
+        )}
+        {!isPrivate && isClaimed && (
+          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#607040', marginBottom: 2 }}>
+            ✓ joined
+          </div>
+        )}
 
         {(member.birth_date || member.birth_year || member.death_date || member.death_year) && (
           <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#b8a882' }}>
@@ -112,6 +132,25 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
         )}
       </div>
 
+      {/* Message button — only if profile is claimed */}
+      {isClaimed && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onMessage(member) }}
+          style={{
+            position: 'absolute', top: 6, left: 8,
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 12, opacity: 0.6, padding: 2,
+            transition: 'opacity 0.15s',
+          }}
+          title={`Message ${member.name}`}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
+        >
+          💬
+        </button>
+      )}
+
+      {/* Add relative button */}
       <button
         onClick={(e) => { e.stopPropagation(); onConnect(member) }}
         style={{
