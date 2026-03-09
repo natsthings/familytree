@@ -99,3 +99,6 @@ That's it! Vercel auto-deploys on every push to main.
 
 my user: nataliabern2007nb@gmail.com
 my password: 5223987C
+
+xevian: xbern777@gmail.com
+password: Penguiny777
