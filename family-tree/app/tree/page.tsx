@@ -121,11 +121,24 @@ export default function TreePage() {
       if (privateMembersData && privateMembersData.length > 0) {
         const privateIds = new Set(privateMembersData.map((m: any) => m.id as string))
         setPrivateMemberIds(privateIds)
+        // Load saved positions for private members
+        const { data: privatePosData } = await supabase
+          .from('private_member_positions')
+          .select('*')
+          .eq('user_id', userId)
         setMembers(prev => {
           const existingIds = new Set(prev.map(m => m.id))
           const newPrivate = privateMembersData
             .filter((m: any) => !existingIds.has(m.id))
-            .map((m: any) => ({ ...m, is_root: false, is_admin: false, claimed_by: null, updated_at: m.created_at, _isPrivate: true }))
+            .map((m: any) => {
+              const savedPos = privatePosData?.find((p: any) => p.member_id === m.id)
+              return {
+                ...m,
+                position_x: savedPos ? savedPos.position_x : m.position_x,
+                position_y: savedPos ? savedPos.position_y : m.position_y,
+                is_root: false, is_admin: false, claimed_by: null, updated_at: m.created_at, _isPrivate: true
+              }
+            })
           return [...prev, ...newPrivate]
         })
       }
@@ -199,20 +212,35 @@ export default function TreePage() {
       if (!userId) return
       setSaveStatus('saving')
       const supabase = createClient()
-      // Save per-user positions
-      await Promise.all(updatedNodes.map((n) =>
-        supabase.from('member_positions').upsert({
-          user_id: userId,
-          member_id: n.id,
-          position_x: n.position.x,
-          position_y: n.position.y,
-        }, { onConflict: 'user_id,member_id' })
-      ))
-      // Admin also updates master layout
-      if (isAdmin) {
-        await Promise.all(updatedNodes.map((n) =>
-          supabase.from('members').update({ position_x: n.position.x, position_y: n.position.y }).eq('id', n.id)
+      const privateNodes = updatedNodes.filter(n => privateMemberIds.has(n.id))
+      const publicNodes = updatedNodes.filter(n => !privateMemberIds.has(n.id))
+      // Save private member positions to private_member_positions
+      if (privateNodes.length > 0) {
+        await Promise.all(privateNodes.map(n =>
+          supabase.from('private_member_positions').upsert({
+            user_id: userId,
+            member_id: n.id,
+            position_x: n.position.x,
+            position_y: n.position.y,
+          }, { onConflict: 'user_id,member_id' })
         ))
+      }
+      // Save public member positions to member_positions
+      if (publicNodes.length > 0) {
+        await Promise.all(publicNodes.map((n) =>
+          supabase.from('member_positions').upsert({
+            user_id: userId,
+            member_id: n.id,
+            position_x: n.position.x,
+            position_y: n.position.y,
+          }, { onConflict: 'user_id,member_id' })
+        ))
+        // Admin also updates master layout for public nodes
+        if (isAdmin) {
+          await Promise.all(publicNodes.map((n) =>
+            supabase.from('members').update({ position_x: n.position.x, position_y: n.position.y }).eq('id', n.id)
+          ))
+        }
       }
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 2000)
