@@ -53,6 +53,7 @@ export default function TreePage() {
   const [privateMode, setPrivateMode] = useState(false)
   const [privateNotes, setPrivateNotes] = useState<Record<string, string>>({})
   const [privateRelationships, setPrivateRelationships] = useState<Relationship[]>([])
+  const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -107,14 +108,27 @@ export default function TreePage() {
     setRelationships(relsData ?? [])
 
     if (isAdmin) {
-      const [{ data: notesData }, { data: privateRelsData }] = await Promise.all([
+      const [{ data: notesData }, { data: privateRelsData }, { data: privateMembersData }] = await Promise.all([
         supabase.from('private_notes').select('*').eq('user_id', userId),
         supabase.from('private_relationships').select('*').eq('user_id', userId),
+        supabase.from('private_members').select('*').eq('user_id', userId),
       ])
       const notesMap: Record<string, string> = {}
       ;(notesData ?? []).forEach((n: any) => { notesMap[n.member_id] = n.note })
       setPrivateNotes(notesMap)
       setPrivateRelationships(privateRelsData ?? [])
+      // Merge private members into the members list
+      if (privateMembersData && privateMembersData.length > 0) {
+        const privateIds = new Set(privateMembersData.map((m: any) => m.id as string))
+        setPrivateMemberIds(privateIds)
+        setMembers(prev => {
+          const existingIds = new Set(prev.map(m => m.id))
+          const newPrivate = privateMembersData
+            .filter((m: any) => !existingIds.has(m.id))
+            .map((m: any) => ({ ...m, is_root: false, is_admin: false, claimed_by: null, updated_at: m.created_at, _isPrivate: true }))
+          return [...prev, ...newPrivate]
+        })
+      }
     }
 
     const myProfile = allMembers.find((m: any) => m.claimed_by === userId)
@@ -140,7 +154,7 @@ export default function TreePage() {
       },
     }))
     setNodes(newNodes)
-  }, [members, userId, isAdmin])
+  }, [members, userId, isAdmin, privateMemberIds])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
@@ -272,6 +286,8 @@ export default function TreePage() {
     if (deletedMemberId) {
       setMembers(prev => prev.filter(m => m.id !== deletedMemberId))
       setRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
+      setPrivateRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
+      setPrivateMemberIds(prev => { const next = new Set(prev); next.delete(deletedMemberId); return next })
     } else {
       loadData()
     }
