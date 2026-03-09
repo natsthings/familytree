@@ -14,7 +14,7 @@ A few things to know before you dive in:
 
 Works best on a laptop or desktop. Mobile will work, but it's a bit cramped for all our branches.
 
-You can add people, photos, and notes freely — but you cannot delete anything. If something needs to be removed (typos happen, I know), just hit the "Request deletion" button and I'll take care of it. This is intentional — I don't want anyone accidentally erasing Abuela.
+You can add people, photos, and notes freely — but you cannot delete anything. If something needs to be removed (typos happen, I know), just hit the "Request deletion" button and I'll take care of it. This is intentional — I don't want anyone accidentally erasing grandma.
 
 To add a new family member, click the gold "+ Add member" button in the top right, or the little + dot on any card to add someone connected to that person.
 
