@@ -70,7 +70,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           background: member.is_root
             ? 'linear-gradient(135deg, #c49040, #8a6020)'
             : 'linear-gradient(135deg, #3a3020, #252015)',
-          border: `2px solid ${member.is_root ? '#c49040' : '#3a3020'}`,
+          border: `2px solid ${member.is_root ? '#c49040' : 'transparent'}`,
           margin: '0 auto 8px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, flexShrink: 0,
