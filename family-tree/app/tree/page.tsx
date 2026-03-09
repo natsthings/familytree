@@ -35,10 +35,11 @@ const nodeTypes = { memberNode: MemberNode }
 
 function edgeStyle(relType: string) {
   const isSpouse = relType === 'spouse'
-  const isSibling = relType === 'sibling'
+  const isSibling = relType === 'sibling' || relType === 'step_sibling'
   const isHorizontal = isSpouse || isSibling
   const color = relType === 'spouse' ? '#b06080'
     : relType === 'sibling' ? '#507090'
+    : relType === 'step_sibling' ? '#706040'
     : relType === 'other' ? '#607060'
     : '#c49040'
   return { isHorizontal, isSpouse, color, sourceHandle: isHorizontal ? 'right' : 'bottom', targetHandle: isHorizontal ? 'left' : 'top' }
@@ -65,6 +66,8 @@ export default function TreePage() {
   const [edgeTooltip, setEdgeTooltip] = useState<{ x: number; y: number; label: string } | null>(null)
   const [deleteRequest, setDeleteRequest] = useState<{ targetType: 'member' | 'relationship'; targetId: string; description: string } | null>(null)
   const [messageBox, setMessageBox] = useState<{ memberId: string; memberName: string } | null>(null)
+  const [showRequestsPanel, setShowRequestsPanel] = useState(false)
+  const [deleteRequests, setDeleteRequests] = useState<any[]>([])
 
   const [modal, setModal] = useState<{
     mode: 'add' | 'edit' | 'connect'
@@ -170,7 +173,7 @@ export default function TreePage() {
         isAdmin,
         onEdit: (member: Member) => setModal({ mode: 'edit', member }),
         onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
-        onMessage: (member: Member) => setMessageBox({ memberId: member.id, memberName: member.name }),
+        onMessage: (m: Member) => setMessageBox({ memberId: m.id, memberName: m.name }),
       },
     }))
     setNodes(newNodes)
@@ -317,6 +320,12 @@ export default function TreePage() {
     setEdgeTooltip(null)
   }, [])
 
+  async function loadDeleteRequests() {
+    const supabase = createClient()
+    const { data } = await supabase.from('delete_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false })
+    setDeleteRequests(data ?? [])
+  }
+
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -394,6 +403,11 @@ export default function TreePage() {
             <Mail size={13} />
           </button>
           {isAdmin && (
+            <button onClick={() => { setShowRequestsPanel(true); loadDeleteRequests() }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+              📋 Requests
+            </button>
+          )}
+          {isAdmin && (
             <button onClick={() => setPrivateMode(p => !p)} title={privateMode ? 'Switch to public tree' : 'Switch to private tree'} style={{ display: 'flex', alignItems: 'center', gap: 6, background: privateMode ? 'rgba(80,40,80,0.5)' : 'rgba(255,255,255,0.05)', color: privateMode ? '#d090d0' : '#b8a882', border: `1px solid ${privateMode ? '#806080' : '#3a3020'}`, borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
               {privateMode ? '🔒 Private' : '🌐 Public'}
             </button>
@@ -434,7 +448,7 @@ export default function TreePage() {
       {/* Legend */}
       <div style={{ position: 'absolute', top: 70, right: 16, zIndex: 10, background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020', borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: 160 }}>
         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Legend</div>
-        {[['→', '#c49040', 'Parent → Child'], ['♥', '#b06080', 'Spouse'], ['—', '#507090', 'Sibling'], ['—', '#607060', 'Other']].map(([icon, color, label]) => (
+        {[['→', '#c49040', 'Parent → Child'], ['♥', '#b06080', 'Spouse'], ['—', '#507090', 'Sibling'], ['╌', '#706040', 'Step-Sibling'], ['—', '#607060', 'Other']].map(([icon, color, label]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
             <span style={{ color, fontSize: icon === '♥' ? 14 : 16, lineHeight: 1 }}>{icon}</span>
             <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color }}>{label}</span>
@@ -472,6 +486,52 @@ export default function TreePage() {
               targetDescription={deleteRequest.description}
               onClose={() => setDeleteRequest(null)}
             />
+          )}
+          {showRequestsPanel && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+              onClick={(e) => { if (e.target === e.currentTarget) setShowRequestsPanel(false) }}>
+              <div style={{ width: '100%', maxWidth: 520, maxHeight: '80vh', overflowY: 'auto', background: '#1c1610', border: '1px solid #3a3020', borderRadius: 16, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: '#f5edd8' }}>📋 Removal Requests</h2>
+                  <button onClick={() => setShowRequestsPanel(false)} style={{ background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                </div>
+                {deleteRequests.length === 0 ? (
+                  <p style={{ fontFamily: 'Lora, serif', fontSize: 14, color: '#b8a882', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No pending requests</p>
+                ) : deleteRequests.map((req: any) => (
+                  <div key={req.id} style={{ padding: '14px', background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 10, marginBottom: 10 }}>
+                    <div style={{ fontFamily: 'Lora, serif', fontSize: 14, color: '#f5edd8', marginBottom: 6 }}>{req.target_description}</div>
+                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#b8a882', marginBottom: 10 }}>
+                      Requested by {req.requester_name} · {new Date(req.created_at).toLocaleDateString()} · {req.target_type}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={async () => {
+                        const supabase = createClient()
+                        if (req.target_type === 'member') {
+                          await supabase.rpc('delete_member', { member_id: req.target_id })
+                          setMembers(prev => prev.filter(m => m.id !== req.target_id))
+                        } else if (req.target_type === 'relationship') {
+                          await supabase.from('relationships').delete().eq('id', req.target_id)
+                          setRelationships(prev => prev.filter(r => r.id !== req.target_id))
+                        } else if (req.target_type === 'scrapbook_item') {
+                          await supabase.from('scrapbook_items').delete().eq('id', req.target_id)
+                        }
+                        await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', req.id)
+                        setDeleteRequests(prev => prev.filter(r => r.id !== req.id))
+                      }} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#8b2020', color: '#fff', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+                        ✓ Approve & Delete
+                      </button>
+                      <button onClick={async () => {
+                        const supabase = createClient()
+                        await supabase.from('delete_requests').update({ status: 'denied' }).eq('id', req.id)
+                        setDeleteRequests(prev => prev.filter(r => r.id !== req.id))
+                      }} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #3a3020', background: 'transparent', color: '#b8a882', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+                        ✕ Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
           {messageBox && userId && (
             <MessageBox
