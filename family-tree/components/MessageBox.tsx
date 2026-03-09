@@ -54,7 +54,7 @@ export default function MessageBox({ currentUserId, currentUserName, toUserId, t
         const map: Record<string, Conversation> = {}
         data.forEach((m: Message) => {
           const otherId = m.sender_id === currentUserId ? m.recipient_id : m.sender_id
-          const otherName = m.sender_id === currentUserId ? (m as any).recipient_name ?? 'Family member' : m.sender_name
+          const otherName = m.sender_id === currentUserId ? (m as any).recipient_name : m.sender_name
           if (!map[otherId]) {
             map[otherId] = { userId: otherId, userName: otherName, lastMessage: m.content, lastAt: m.created_at, unread: 0 }
           }
@@ -105,6 +105,7 @@ export default function MessageBox({ currentUserId, currentUserName, toUserId, t
       sender_id: currentUserId,
       sender_name: currentUserName,
       recipient_id: activeUserId,
+      recipient_name: activeUserName,
       content: text.trim(),
     })
     setText('')
