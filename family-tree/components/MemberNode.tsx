@@ -31,13 +31,13 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
       className="member-node-wrap"
       style={{
         position: 'relative',
-        background: member.is_root
+        background: isMyProfile
           ? 'linear-gradient(135deg, #3a2c10 0%, #2c1f0e 100%)'
           : 'linear-gradient(135deg, #1e1a12 0%, #16120c 100%)',
         border: selected
           ? '2px solid #e0b060'
           : isPrivate ? '1px solid #806080'
-          : isMyProfile ? '1px solid #6a5030'
+          : isMyProfile ? '2px solid #c49040'
           : isClaimed ? '1px solid #507040'
           : '1px solid #3a3020',
         borderRadius: '12px',
@@ -71,7 +71,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           background: member.is_root
             ? 'linear-gradient(135deg, #c49040, #8a6020)'
             : 'linear-gradient(135deg, #3a3020, #252015)',
-          border: member.is_root ? '2px solid #c49040' : 'none',
+          border: isMyProfile ? '2px solid #c49040' : 'none',
           margin: '0 auto 8px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20, flexShrink: 0,
@@ -86,7 +86,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
 
         <div style={{
           fontFamily: 'Playfair Display, serif', fontSize: '13px', fontWeight: 600,
-          color: member.is_root ? '#e0b060' : '#f5edd8',
+          color: isMyProfile ? '#e0b060' : '#f5edd8',
           lineHeight: 1.3, marginBottom: 3,
         }}>
           {member.name}
