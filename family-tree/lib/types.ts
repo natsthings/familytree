@@ -19,7 +19,7 @@ export interface Member {
 }
 
 export interface SocialLink {
-  type: 'facebook' | 'instagram' | 'obituary' | 'address' | 'website' | 'other'
+  type: 'phone' | 'email' | 'facebook' | 'instagram' | 'obituary' | 'address' | 'website' | 'other'
   label: string
   url: string
 }
