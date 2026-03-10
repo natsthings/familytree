@@ -113,12 +113,48 @@ function interpretPath(path: Array<{ id: string; type: string; direction: string
     if (types.join(',') === 'parent,parent,sibling,child,child') return 'your second cousin once removed'
   }
 
-  // Fallback: describe the path generically
-  const ups = path.filter(p => p.type === 'parent').length
-  const downs = path.filter(p => p.type === 'child').length
-  if (ups > 0 && downs === 0) return `your ${Array(ups - 1).fill('great-').join('')}grandparent`
-  if (downs > 0 && ups === 0) return `your ${Array(downs - 1).fill('great-').join('')}grandchild`
-  return `family member (${path.length} steps away)`
+  // Fallback: describe the path generically based on ups/downs/laterals
+  const types = path.map(p => p.type)
+  const ups = types.filter(t => t === 'parent').length
+  const downs = types.filter(t => t === 'child').length
+  const hasSpouse = types.includes('spouse')
+  const hasSibling = types.includes('sibling') || types.includes('step_sibling')
+
+  // Pure ascent: parent, grandparent, great-grandparent...
+  if (ups > 0 && downs === 0 && !hasSpouse && !hasSibling) {
+    if (ups === 1) return 'your parent'
+    if (ups === 2) return 'your grandparent'
+    return `your ${'great-'.repeat(ups - 2)}grandparent`
+  }
+  // Pure descent: child, grandchild...
+  if (downs > 0 && ups === 0 && !hasSpouse && !hasSibling) {
+    if (downs === 1) return 'your child'
+    if (downs === 2) return 'your grandchild'
+    return `your ${'great-'.repeat(downs - 2)}grandchild`
+  }
+  // Up then sibling = aunt/uncle at various removes
+  if (ups > 0 && hasSibling && downs === 0) {
+    if (ups === 1) return 'your aunt/uncle'
+    return `your ${'great-'.repeat(ups - 1)}aunt/uncle`
+  }
+  // Sibling then down = niece/nephew at various removes
+  if (hasSibling && downs > 0 && ups === 0) {
+    if (downs === 1) return 'your niece/nephew'
+    return `your ${'great-'.repeat(downs - 1)}niece/nephew`
+  }
+  // Up then sibling then down = cousins
+  if (ups > 0 && hasSibling && downs > 0) {
+    const degree = Math.min(ups, downs)
+    const remove = Math.abs(ups - downs)
+    const degreeStr = degree === 1 ? 'first' : degree === 2 ? 'second' : degree === 3 ? 'third' : `${degree}th`
+    if (remove === 0) return `your ${degreeStr} cousin`
+    return `your ${degreeStr} cousin ${remove === 1 ? 'once' : remove === 2 ? 'twice' : `${remove}x`} removed`
+  }
+  // In-law paths
+  if (hasSpouse && ups > 0) return `your ${'great-'.repeat(Math.max(0, ups - 1))}parent-in-law`
+  if (hasSpouse && downs > 0) return `your ${'great-'.repeat(Math.max(0, downs - 1))}child-in-law`
+  if (hasSpouse && hasSibling) return 'your sibling-in-law'
+  return 'a distant relative'
 }
 
 export default function RelationshipPanel({ member, allMembers, allRelationships, currentUserMemberId, onClose }: RelationshipPanelProps) {
