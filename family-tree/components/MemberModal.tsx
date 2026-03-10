@@ -42,8 +42,10 @@ export default function MemberModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState(member?.name ?? '')
-  const [birthDate, setBirthDate] = useState(member?.birth_date ?? (member?.birth_year ? `${member.birth_year}-01-01` : ''))
-  const [deathDate, setDeathDate] = useState(member?.death_date ?? (member?.death_year ? `${member.death_year}-01-01` : ''))
+  const [birthDate, setBirthDate] = useState(member?.birth_date ?? '')
+  const [deathDate, setDeathDate] = useState(member?.death_date ?? '')
+  const [birthYear, setBirthYear] = useState(member?.birth_year && !member?.birth_date ? String(member.birth_year) : '')
+  const [deathYear, setDeathYear] = useState(member?.death_year && !member?.death_date ? String(member.death_year) : '')
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -115,8 +117,8 @@ export default function MemberModal({
           p_photo_url: photoUrl || null,
           p_birth_date: birthDate || null,
           p_death_date: deathDate || null,
-          p_birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
-          p_death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
+          p_birth_year: birthYear ? parseInt(birthYear) : (birthDate ? parseInt(birthDate.split('-')[0]) : null),
+          p_death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
           p_social_links: JSON.parse(JSON.stringify(socialLinks.filter(l => l.url.trim()))),
         })
         if (nameError) throw nameError
@@ -126,8 +128,8 @@ export default function MemberModal({
           user_id: userId, name, photo_url: photoUrl || null,
           birth_date: birthDate || null,
           death_date: deathDate || null,
-          birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
-          death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
+          birth_year: birthYear ? parseInt(birthYear) : (birthDate ? parseInt(birthDate.split('-')[0]) : null),
+          death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
           position_x: 0 + (Math.random() * 100 - 50),
@@ -142,8 +144,8 @@ export default function MemberModal({
             user_id: userId, name, photo_url: photoUrl || null,
             birth_date: birthDate || null,
             death_date: deathDate || null,
-            birth_year: birthDate ? parseInt(birthDate.split('-')[0]) : null,
-            death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
+            birth_year: birthYear ? parseInt(birthYear) : (birthDate ? parseInt(birthDate.split('-')[0]) : null),
+            death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
             social_links: [],
             ...(privateMode ? {} : { is_root: false }),
             position_x: (sourceForConnect?.position_x ?? 0) + (Math.random() * 200 - 100),
@@ -319,13 +321,21 @@ export default function MemberModal({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div>
                 <label style={labelStyle}>Born</label>
-                <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)}
-                  style={inputStyle} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <input type="number" value={birthYear} onChange={e => { setBirthYear(e.target.value); if (e.target.value) setBirthDate('') }}
+                    style={{ ...inputStyle, fontSize: 13 }} placeholder="Year (e.g. 1942)" min="1000" max="2100" />
+                  <input type="date" value={birthDate} onChange={e => { setBirthDate(e.target.value); if (e.target.value) setBirthYear('') }}
+                    style={{ ...inputStyle, fontSize: 12, color: '#b8a882' }} />
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Died</label>
-                <input type="date" value={deathDate} onChange={e => setDeathDate(e.target.value)}
-                  style={inputStyle} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <input type="number" value={deathYear} onChange={e => { setDeathYear(e.target.value); if (e.target.value) setDeathDate('') }}
+                    style={{ ...inputStyle, fontSize: 13 }} placeholder="Year (e.g. 2001)" min="1000" max="2100" />
+                  <input type="date" value={deathDate} onChange={e => { setDeathDate(e.target.value); if (e.target.value) setDeathYear('') }}
+                    style={{ ...inputStyle, fontSize: 12, color: '#b8a882' }} />
+                </div>
               </div>
             </div>
           )}
