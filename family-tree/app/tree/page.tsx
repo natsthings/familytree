@@ -174,7 +174,10 @@ export default function TreePage() {
     }
     refreshUnread()
     window.addEventListener('messages-read', refreshUnread)
-    // Sticky note handlers
+    return () => window.removeEventListener('messages-read', refreshUnread)
+  }, [userId])
+
+  // Sticky note handlers
   const handleAddNote = useCallback(async () => {
     const supabase = createClient()
     const { data } = await supabase.from('tree_notes').insert({
@@ -212,9 +215,6 @@ export default function TreePage() {
     window.addEventListener('sticky-color', handler)
     return () => window.removeEventListener('sticky-color', handler)
   }, [])
-
-  return () => window.removeEventListener('messages-read', refreshUnread)
-  }, [userId])
 
   useEffect(() => {
     const visibleMembers = members.filter(m =>
