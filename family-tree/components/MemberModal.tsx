@@ -153,6 +153,9 @@ export default function MemberModal({
           targetId = newMember.id
         }
         const relTable = privateMode ? 'private_relationships' : 'relationships'
+        // Delete any existing relationship between these two nodes first to prevent doubling
+        await supabase.from(relTable as any).delete()
+          .or(`and(source_id.eq.${sourceForConnect!.id},target_id.eq.${targetId}),and(source_id.eq.${targetId},target_id.eq.${sourceForConnect!.id})`)
         const { error: relError } = await supabase.from(relTable as any).insert({
           user_id: userId, source_id: sourceForConnect!.id, target_id: targetId,
           relation_type: relationType, label: customLabel || null,
