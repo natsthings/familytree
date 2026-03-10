@@ -508,6 +508,8 @@ export default function TreePage() {
               onRequestDelete={(targetId, description) => setDeleteRequest({ targetType: 'member', targetId, description })}
               pendingTargetId={pendingConnect?.targetId}
               allMembers={members}
+              allRelationships={[...relationships, ...privateRelationships]}
+              currentUserMemberId={members.find(m => m.claimed_by === userId)?.id ?? null}
             />
           )}
           {deleteRequest && userId && (
