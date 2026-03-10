@@ -104,15 +104,14 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           </div>
         )}
 
-        {(member.birth_date || member.birth_year || member.death_date || member.death_year) && (
+        {(member.birth_date || member.birth_year || member.death_date || member.death_year || member.is_deceased) && (
           <div style={{ fontFamily: 'DM Mono, monospace', fontSize: '10px', color: '#b8a882' }}>
-            {member.birth_date
+            {'b. '}{member.birth_date
               ? new Date(member.birth_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : member.birth_year ?? ''}
-            {(member.birth_date || member.birth_year) && (member.death_date || member.death_year) ? ' – ' : ''}
-            {member.death_date
+              : member.birth_year ?? '—'}
+            {isDeceased && <>{' · d. '}{member.death_date
               ? new Date(member.death_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : member.death_year ?? ''}
+              : member.death_year ?? '—'}</>}
           </div>
         )}
 
