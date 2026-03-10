@@ -110,19 +110,7 @@ export default function TreePage() {
       return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
     })
 
-    // If this user has no saved positions at all, seed from master (Natalia's layout)
-    // so new users always start with the clean master layout
-    if ((myPositions?.length ?? 0) === 0 && allMembers.length > 0) {
-      const supabaseInner = createClient()
-      await Promise.all(allMembers.map((m: any) =>
-        supabaseInner.from('member_positions').upsert({
-          user_id: userId,
-          member_id: m.id,
-          position_x: m.position_x,
-          position_y: m.position_y,
-        }, { onConflict: 'user_id,member_id' })
-      ))
-    }
+
 
     setMembers(allMembers)
     setRelationships(relsData ?? [])
@@ -270,10 +258,10 @@ export default function TreePage() {
             position_y: n.position.y,
           }, { onConflict: 'user_id,member_id' })
         ))
-        // Admin also updates master layout for public nodes
+        // Admin also updates master layout for public nodes via security definer RPC
         if (isAdmin) {
           await Promise.all(publicNodes.map((n) =>
-            supabase.from('members').update({ position_x: n.position.x, position_y: n.position.y }).eq('id', n.id)
+            supabase.rpc('update_member_position', { p_member_id: n.id, p_x: n.position.x, p_y: n.position.y })
           ))
         }
       }
@@ -451,6 +439,14 @@ export default function TreePage() {
           )}
           <button onClick={() => setModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8, padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> Add member
+          </button>
+          <button onClick={async () => {
+            if (!confirm('Reset your layout to the default view?')) return
+            const supabase = createClient()
+            await supabase.rpc('reset_user_positions', { p_user_id: userId })
+            loadData()
+          }} title="Reset layout to default" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+            ↺
           </button>
           <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             <LogOut size={13} /> Sign out
