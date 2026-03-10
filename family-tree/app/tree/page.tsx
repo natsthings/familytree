@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase'
 import { Member, Relationship } from '@/lib/types'
 import MemberNode from '@/components/MemberNode'
 import MemberModal from '@/components/MemberModal'
+import StickyNoteNode from '@/components/StickyNoteNode'
 import WelcomeLetter from '@/components/WelcomeLetter'
 import DeleteRequestModal from '@/components/DeleteRequestModal'
 import MessageBox from '@/components/MessageBox'
@@ -31,7 +32,7 @@ function useDebouncedCallback<T extends (...args: Parameters<T>) => void>(fn: T,
   }, [fn, delay])
 }
 
-const nodeTypes = { memberNode: MemberNode }
+const nodeTypes = { memberNode: MemberNode, stickyNote: StickyNoteNode }
 
 function edgeStyle(relType: string) {
   const isSpouse = relType === 'spouse'
@@ -99,10 +100,11 @@ export default function TreePage() {
     if (!userId) return
     const supabase = createClient()
 
-    const [{ data: membersData }, { data: relsData }, { data: myPositions }] = await Promise.all([
+    const [{ data: membersData }, { data: relsData }, { data: myPositions }, { data: notesData }] = await Promise.all([
       supabase.from('members').select('*').order('name'),
       supabase.from('relationships').select('*'),
       supabase.from('member_positions').select('*').eq('user_id', userId),
+      supabase.from('tree_notes').select('*'),
     ])
 
     const allMembers = (membersData ?? []).map((m: any) => {
@@ -113,6 +115,7 @@ export default function TreePage() {
 
 
     setMembers(allMembers)
+    setTreeNotes(notesData ?? [])
     setRelationships(relsData ?? [])
 
     if (isAdmin) {
@@ -170,7 +173,46 @@ export default function TreePage() {
     }
     refreshUnread()
     window.addEventListener('messages-read', refreshUnread)
-    return () => window.removeEventListener('messages-read', refreshUnread)
+    // Sticky note handlers
+  const handleAddNote = useCallback(async () => {
+    const supabase = createClient()
+    const { data } = await supabase.from('tree_notes').insert({
+      user_id: userId, content: '', color: '#f5e642',
+      position_x: 100 + Math.random() * 200, position_y: 100 + Math.random() * 200,
+    }).select().single()
+    if (data) setTreeNotes(prev => [...prev, data])
+  }, [userId])
+
+  const handleUpdateNote = useCallback(async (id: string, content: string) => {
+    const supabase = createClient()
+    setTreeNotes(prev => prev.map(n => n.id === id ? { ...n, content } : n))
+    await supabase.from('tree_notes').update({ content }).eq('id', id)
+  }, [])
+
+  const handleDeleteNote = useCallback(async (id: string) => {
+    const supabase = createClient()
+    setTreeNotes(prev => prev.filter(n => n.id !== id))
+    await supabase.from('tree_notes').delete().eq('id', id)
+  }, [])
+
+  const handleNotePositionSave = useCallback(async (id: string, x: number, y: number) => {
+    const supabase = createClient()
+    await supabase.from('tree_notes').update({ position_x: x, position_y: y }).eq('id', id)
+  }, [])
+
+  // Listen for color changes from sticky note
+  useEffect(() => {
+    const handler = async (e: any) => {
+      const { id, color } = e.detail
+      setTreeNotes(prev => prev.map(n => n.id === id ? { ...n, color } : n))
+      const supabase = createClient()
+      await supabase.from('tree_notes').update({ color }).eq('id', id)
+    }
+    window.addEventListener('sticky-color', handler)
+    return () => window.removeEventListener('sticky-color', handler)
+  }, [])
+
+  return () => window.removeEventListener('messages-read', refreshUnread)
   }, [userId])
 
   useEffect(() => {
@@ -193,8 +235,20 @@ export default function TreePage() {
         onMessage: (m: Member) => { if (m.claimed_by) setMessageBox({ toUserId: m.claimed_by, toUserName: m.name }) },
       },
     }))
-    setNodes(newNodes)
-  }, [members, userId, isAdmin, privateMemberIds, privateMode])
+    const noteNodes: Node[] = treeNotes.map(n => ({
+      id: n.id,
+      type: 'stickyNote',
+      position: { x: n.position_x, y: n.position_y },
+      data: {
+        content: n.content,
+        color: n.color,
+        isOwner: n.user_id === userId,
+        onUpdate: handleUpdateNote,
+        onDelete: handleDeleteNote,
+      },
+    }))
+    setNodes([...newNodes, ...noteNodes])
+  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
@@ -288,10 +342,16 @@ export default function TreePage() {
           }
         })
         savePositions(updated)
+        // Save sticky note positions
+        updated.filter(n => n.type === 'stickyNote').forEach(n => {
+          if (changes.some(c => c.type === 'position' && c.id === n.id && c.dragging === false)) {
+            handleNotePositionSave(n.id, n.position.x, n.position.y)
+          }
+        })
       }
       return updated
     })
-  }, [savePositions, privateMemberIds])
+  }, [savePositions, privateMemberIds, handleNotePositionSave])
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     const removals = changes.filter((c) => c.type === 'remove')
@@ -445,6 +505,9 @@ export default function TreePage() {
           )}
           <button onClick={() => setModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8, padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> Add member
+          </button>
+          <button onClick={handleAddNote} title="Add sticky note" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,230,66,0.1)', color: '#f5e642', border: '1px solid rgba(245,230,66,0.25)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 15 }}>
+            📌
           </button>
           <button onClick={async () => {
             if (!confirm('Reset your layout to the default view?')) return
