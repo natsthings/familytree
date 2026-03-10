@@ -126,8 +126,8 @@ export default function MemberModal({
           death_year: deathDate ? parseInt(deathDate.split('-')[0]) : null,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
-          position_x: Math.random() * 400 - 200,
-          position_y: Math.random() * 400 - 200,
+          position_x: 0 + (Math.random() * 100 - 50),
+          position_y: 0 + (Math.random() * 100 - 50),
         })
         if (error) throw error
       } else if (mode === 'connect') {
