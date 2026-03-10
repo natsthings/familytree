@@ -5,6 +5,7 @@ export interface Member {
   birth_year: number | null
   birth_date: string | null
   death_year: number | null
+  is_deceased: boolean | null
   death_date: string | null
   notes: string | null
   photo_url: string | null
