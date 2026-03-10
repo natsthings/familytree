@@ -89,7 +89,6 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           color: isMyProfile ? '#e0b060' : '#f5edd8',
           lineHeight: 1.3, marginBottom: 3,
         }}>
-          {member.is_deceased && !member.death_date && !member.death_year && <span style={{ fontSize: 9, marginRight: 3, opacity: 0.6 }}>🕯️</span>}
           {member.name}
         </div>
 
