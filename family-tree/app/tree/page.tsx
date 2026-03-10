@@ -110,6 +110,20 @@ export default function TreePage() {
       return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
     })
 
+    // If this user has no saved positions at all, seed from master (Natalia's layout)
+    // so new users always start with the clean master layout
+    if ((myPositions?.length ?? 0) === 0 && allMembers.length > 0) {
+      const supabaseInner = createClient()
+      await Promise.all(allMembers.map((m: any) =>
+        supabaseInner.from('member_positions').upsert({
+          user_id: userId,
+          member_id: m.id,
+          position_x: m.position_x,
+          position_y: m.position_y,
+        }, { onConflict: 'user_id,member_id' })
+      ))
+    }
+
     setMembers(allMembers)
     setRelationships(relsData ?? [])
 
