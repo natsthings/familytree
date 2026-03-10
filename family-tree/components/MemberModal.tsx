@@ -46,6 +46,7 @@ export default function MemberModal({
   const [deathDate, setDeathDate] = useState(member?.death_date ?? '')
   const [birthYear, setBirthYear] = useState(member?.birth_year && !member?.birth_date ? String(member.birth_year) : '')
   const [deathYear, setDeathYear] = useState(member?.death_year && !member?.death_date ? String(member.death_year) : '')
+  const [isDeceased, setIsDeceased] = useState(!!member?.is_deceased || !!member?.death_date || !!member?.death_year)
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -130,6 +131,7 @@ export default function MemberModal({
           death_date: deathDate || null,
           birth_year: birthYear ? parseInt(birthYear) : (birthDate ? parseInt(birthDate.split('-')[0]) : null),
           death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
+          is_deceased: isDeceased,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
           position_x: 0 + (Math.random() * 100 - 50),
@@ -346,6 +348,25 @@ export default function MemberModal({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Deceased toggle */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <button
+              type="button"
+              onClick={() => setIsDeceased(p => !p)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+                borderRadius: 8, cursor: 'pointer', border: 'none', width: 'fit-content',
+                background: isDeceased ? 'rgba(139,110,60,0.2)' : 'rgba(255,255,255,0.04)',
+                color: isDeceased ? '#c49040' : '#b8a882',
+                fontFamily: 'Lora, serif', fontSize: 13,
+                transition: 'all 0.2s',
+              }}
+            >
+              <span style={{ fontSize: 15 }}>{isDeceased ? '🕯️' : '○'}</span>
+              {isDeceased ? 'Deceased' : 'Mark as deceased'}
+            </button>
           )}
 
           {/* Relation type */}
