@@ -241,8 +241,8 @@ export default function MemberModal({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Profile photo — edit/add mode */}
-          {(mode === 'edit' || (mode === 'connect' && connectTo === 'new') || mode === 'add') && (
+          {/* Profile photo — edit/add mode, only own profile or admin */}
+          {(mode === 'add' || (mode === 'connect' && connectTo === 'new') || (mode === 'edit' && (isAdmin || member?.claimed_by === userId))) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div
                 onClick={() => fileInputRef.current?.click()}
