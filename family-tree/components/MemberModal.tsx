@@ -47,6 +47,8 @@ export default function MemberModal({
   const [birthYear, setBirthYear] = useState(member?.birth_year && !member?.birth_date ? String(member.birth_year) : '')
   const [deathYear, setDeathYear] = useState(member?.death_year && !member?.death_date ? String(member.death_year) : '')
   const [isDeceased, setIsDeceased] = useState(!!member?.is_deceased || !!member?.death_date || !!member?.death_year)
+  const [origins, setOrigins] = useState<string[]>(member?.origins ?? [])
+  const [originInput, setOriginInput] = useState('')
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -122,6 +124,7 @@ export default function MemberModal({
           p_death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
           p_social_links: JSON.parse(JSON.stringify(socialLinks.filter((l: any) => l.url?.trim()))),
           p_is_deceased: isDeceased,
+          p_origins: origins,
         })
         if (nameError) throw nameError
       } else if (mode === 'add') {
@@ -133,6 +136,7 @@ export default function MemberModal({
           birth_year: birthYear ? parseInt(birthYear) : (birthDate ? parseInt(birthDate.split('-')[0]) : null),
           death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
           is_deceased: isDeceased,
+          origins: origins,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
           position_x: 0 + (Math.random() * 100 - 50),
@@ -368,6 +372,52 @@ export default function MemberModal({
               <span style={{ fontSize: 15 }}>{isDeceased ? '🕯️' : '○'}</span>
               {isDeceased ? 'Deceased' : 'Mark as deceased'}
             </button>
+          )}
+
+          {/* Origins / heritage */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <div>
+              <label style={labelStyle}>Origins & Heritage</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {origins.map((o, i) => (
+                  <span key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    background: 'rgba(196,144,64,0.12)', border: '1px solid rgba(196,144,64,0.3)',
+                    borderRadius: 20, padding: '3px 10px',
+                    fontFamily: 'Lora, serif', fontSize: 12, color: '#c49040',
+                  }}>
+                    {o}
+                    <button onClick={() => setOrigins(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', color: '#c49040', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={originInput}
+                  onChange={e => setOriginInput(e.target.value)}
+                  onKeyDown={e => {
+                    if ((e.key === 'Enter' || e.key === ',') && originInput.trim()) {
+                      e.preventDefault()
+                      const val = originInput.trim().replace(/,$/, '')
+                      if (val && !origins.includes(val)) setOrigins(prev => [...prev, val])
+                      setOriginInput('')
+                    }
+                  }}
+                  placeholder="e.g. French, Panamanian… (press Enter)"
+                  style={{ ...inputStyle, flex: 1, fontSize: 13 }}
+                />
+                <button onClick={() => {
+                  const val = originInput.trim()
+                  if (val && !origins.includes(val)) setOrigins(prev => [...prev, val])
+                  setOriginInput('')
+                }} style={{
+                  padding: '8px 14px', borderRadius: 8, border: '1px solid #3a3020',
+                  background: 'rgba(196,144,64,0.1)', color: '#c49040', cursor: 'pointer',
+                  fontFamily: 'Lora, serif', fontSize: 13,
+                }}>Add</button>
+              </div>
+            </div>
           )}
 
           {/* Relation type */}
