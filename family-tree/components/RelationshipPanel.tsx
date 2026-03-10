@@ -185,6 +185,26 @@ export default function RelationshipPanel({ member, allMembers, allRelationships
       .filter(c => c.other)
   }, [member, allMembers, allRelationships])
 
+  // Collect all unique origins from this person + all ancestors
+  const heritage = useMemo(() => {
+    const collected = new Set<string>()
+    const visited = new Set<string>()
+    const queue = [member.id]
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      if (visited.has(id)) continue
+      visited.add(id)
+      const m = allMembers.find(m => m.id === id)
+      if (m?.origins) m.origins.forEach(o => collected.add(o))
+      // Walk up to parents
+      allRelationships.forEach(r => {
+        if (r.relation_type === 'parent' && r.target_id === id && !visited.has(r.source_id)) queue.push(r.source_id)
+        if (r.relation_type === 'child' && r.source_id === id && !visited.has(r.target_id)) queue.push(r.target_id)
+      })
+    }
+    return Array.from(collected)
+  }, [member, allMembers, allRelationships])
+
   // What this person is to the current user
   const relationToUser = useMemo(() => {
     if (!currentUserMemberId || currentUserMemberId === member.id) return null
@@ -218,6 +238,24 @@ export default function RelationshipPanel({ member, allMembers, allRelationships
         <div style={{ marginBottom: 14, padding: '10px 14px', background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 10 }}>
           <div style={{ fontFamily: 'Lora, serif', fontSize: 12, color: '#b8a882', fontStyle: 'italic' }}>
             No direct relationship path found
+          </div>
+        </div>
+      )}
+
+      {/* Heritage */}
+      {heritage.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+            Heritage
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {heritage.map((o, i) => (
+              <span key={i} style={{
+                background: 'rgba(80,112,90,0.15)', border: '1px solid rgba(80,112,90,0.35)',
+                borderRadius: 20, padding: '3px 10px',
+                fontFamily: 'Lora, serif', fontSize: 12, color: '#80b090', fontStyle: 'italic',
+              }}>{o}</span>
+            ))}
           </div>
         </div>
       )}
