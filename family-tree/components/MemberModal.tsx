@@ -241,34 +241,42 @@ export default function MemberModal({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Profile photo — edit/add mode, only own profile or admin */}
-          {(mode === 'add' || (mode === 'connect' && connectTo === 'new') || (mode === 'edit' && (isAdmin || member?.claimed_by === userId))) && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  width: 72, height: 72, borderRadius: '50%', flexShrink: 0,
-                  background: photoPreview ? 'transparent' : 'linear-gradient(135deg, #3a3020, #252015)',
-                  border: '2px dashed #3a3020', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  overflow: 'hidden', position: 'relative',
-                  transition: 'border-color 0.2s',
-                }}
-              >
-                {photoPreview ? (
-                  <img src={photoPreview} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : uploadingPhoto ? (
-                  <div style={{ width: 20, height: 20, border: '2px solid #c49040', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                ) : (
-                  <Upload size={20} color="#b8a882" />
-                )}
-              </div>
-              <div>
-                <div style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8', marginBottom: 4 }}>Profile photo</div>
-                <div style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882', fontStyle: 'italic' }}>Click to upload. More photos go in the scrapbook.</div>
-              </div>
-              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
-            </div>
+          {/* Profile photo — always show, only clickable for own profile or admin */}
+          {(mode === 'add' || (mode === 'connect' && connectTo === 'new') || mode === 'edit') && (
+            (() => {
+              const canEdit = mode !== 'edit' || isAdmin || member?.claimed_by === userId
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div
+                    onClick={() => canEdit && fileInputRef.current?.click()}
+                    style={{
+                      width: 72, height: 72, borderRadius: '50%', flexShrink: 0,
+                      background: photoPreview ? 'transparent' : 'linear-gradient(135deg, #3a3020, #252015)',
+                      border: canEdit ? '2px dashed #3a3020' : '2px solid #3a3020',
+                      cursor: canEdit ? 'pointer' : 'default',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden', position: 'relative',
+                      transition: 'border-color 0.2s',
+                    }}
+                  >
+                    {photoPreview ? (
+                      <img src={photoPreview} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : uploadingPhoto ? (
+                      <div style={{ width: 20, height: 20, border: '2px solid #c49040', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    ) : (
+                      <Upload size={20} color="#b8a882" />
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8', marginBottom: 4 }}>Profile photo</div>
+                    <div style={{ fontFamily: 'Lora, serif', fontSize: 11, color: '#b8a882', fontStyle: 'italic' }}>
+                      {canEdit ? 'Click to upload. More photos go in the scrapbook.' : 'More photos in the scrapbook.'}
+                    </div>
+                  </div>
+                  {canEdit && <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />}
+                </div>
+              )
+            })()
           )}
 
           {/* Connect mode toggle */}
