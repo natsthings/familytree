@@ -12,6 +12,8 @@ Welcome to Roots — our family tree, built with love (and a lot of code).
 
 A few things to know before you dive in:
 
+When you first sign in, press the refresh button between the sign out and add member buttons to space everyone out. 
+
 Works best on a laptop or desktop. Mobile will work, but it's a bit cramped for all our branches.
 
 You can add people, photos, and notes freely — but you cannot delete anything. If something needs to be removed (typos happen, I know), just hit the "Request deletion" button and I'll take care of it. This is intentional — I don't want anyone accidentally erasing grandma.
@@ -32,6 +34,8 @@ const LETTER_ES = `
 Bienvenidos a Roots — nuestro árbol genealógico, hecho con amor (y mucho código).
 
 Algunas cosas importantes antes de empezar:
+
+Cuando inicie sesión por primera vez, presione el botón actualizar entre los botones cerrar sesión y agregar miembro para espaciar a todos.
 
 Funciona mejor en una computadora o laptop. En el celular funciona, pero es un poco pequeño para todas nuestras ramas.
 
