@@ -6,6 +6,7 @@ import { Member, SocialLink, RELATION_LABELS, RelationType } from '@/lib/types'
 import { createClient } from '@/lib/supabase'
 import { uploadToCloudinary } from '@/lib/cloudinary'
 import { useRouter } from 'next/navigation'
+import RelationshipPanel from '@/components/RelationshipPanel'
 
 interface MemberModalProps {
   mode: 'add' | 'edit' | 'connect'
@@ -19,6 +20,8 @@ interface MemberModalProps {
   onRequestDelete?: (targetId: string, description: string) => void
   pendingTargetId?: string
   allMembers?: Member[]
+  allRelationships?: import('@/lib/types').Relationship[]
+  currentUserMemberId?: string | null
 }
 
 const SOCIAL_TYPES = [
@@ -33,7 +36,7 @@ const SOCIAL_TYPES = [
 ]
 
 export default function MemberModal({
-  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers,
+  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers, allRelationships = [], currentUserMemberId = null,
 }: MemberModalProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -53,6 +56,7 @@ export default function MemberModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [privateNote, setPrivateNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [showRelPanel, setShowRelPanel] = useState(false)
 
   const isDragConnect = !!pendingTargetId
   const [connectTo, setConnectTo] = useState<'new' | 'existing'>(isDragConnect ? 'existing' : 'new')
@@ -393,21 +397,47 @@ export default function MemberModal({
             </div>
           )}
 
-          {/* Open scrapbook button — edit mode only */}
+          {/* Open scrapbook + relationships — edit mode only */}
           {mode === 'edit' && member && (
-            <a
-              href={`/scrapbook/${member.id}`}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                padding: '10px', borderRadius: 8,
-                border: '1px solid #c49040', background: 'rgba(196,144,64,0.08)',
-                color: '#c49040', fontFamily: 'Playfair Display, serif',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                textDecoration: 'none',
-              }}
-            >
-              📖 Open Scrapbook
-            </a>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a
+                href={`/scrapbook/${member.id}`}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px', borderRadius: 8,
+                  border: '1px solid #c49040', background: 'rgba(196,144,64,0.08)',
+                  color: '#c49040', fontFamily: 'Playfair Display, serif',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  textDecoration: 'none',
+                }}
+              >
+                📖 Scrapbook
+              </a>
+              <button
+                onClick={() => setShowRelPanel(p => !p)}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${showRelPanel ? '#507090' : '#3a3020'}`,
+                  background: showRelPanel ? 'rgba(80,112,144,0.15)' : 'transparent',
+                  color: showRelPanel ? '#8ab0d0' : '#b8a882',
+                  fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600,
+                }}
+              >
+                🌿 Relationships
+              </button>
+            </div>
+          )}
+
+          {/* Relationship panel */}
+          {showRelPanel && mode === 'edit' && member && (
+            <RelationshipPanel
+              member={member}
+              allMembers={allMembers ?? []}
+              allRelationships={allRelationships}
+              currentUserMemberId={currentUserMemberId}
+              onClose={() => setShowRelPanel(false)}
+            />
           )}
         </div>
 
