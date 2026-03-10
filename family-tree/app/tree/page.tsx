@@ -204,9 +204,15 @@ export default function TreePage() {
       const { isHorizontal, isSpouse, color, sourceHandle, targetHandle } = edgeStyle(r.relation_type)
       const src = members.find(m => m.id === r.source_id)
       const tgt = members.find(m => m.id === r.target_id)
-      const tooltipLabel = src && tgt
-        ? `${src.name} & ${tgt.name} · ${r.relation_type}`
-        : r.relation_type
+      const relVerb = (type: string, srcName: string, tgtName: string) => {
+        if (type === 'parent') return `${srcName} is parent of ${tgtName}`
+        if (type === 'child') return `${srcName} is child of ${tgtName}`
+        if (type === 'spouse') return `${srcName} & ${tgtName} · Spouses`
+        if (type === 'sibling') return `${srcName} & ${tgtName} · Siblings`
+        if (type === 'step_sibling') return `${srcName} & ${tgtName} · Step-Siblings`
+        return `${srcName} & ${tgtName} · ${(r as any).label ?? type}`
+      }
+      const tooltipLabel = src && tgt ? relVerb(r.relation_type, src.name, tgt.name) : r.relation_type
       return {
         id: r.id,
         source: r.source_id,
