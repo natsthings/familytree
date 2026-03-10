@@ -21,7 +21,7 @@ const handleStyle = {
 
 function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
   const { member, currentUserId, isAdmin, onEdit, onConnect, onMessage } = data
-  const isDeceased = !!member.death_year
+  const isDeceased = !!member.death_year || !!member.death_date || !!member.is_deceased
   const isClaimed = !!member.claimed_by
   const isMyProfile = member.claimed_by === currentUserId
   const isPrivate = !!(member as any)._isPrivate
@@ -89,6 +89,7 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           color: isMyProfile ? '#e0b060' : '#f5edd8',
           lineHeight: 1.3, marginBottom: 3,
         }}>
+          {member.is_deceased && !member.death_date && !member.death_year && <span style={{ fontSize: 9, marginRight: 3, opacity: 0.6 }}>🕯️</span>}
           {member.name}
         </div>
 
