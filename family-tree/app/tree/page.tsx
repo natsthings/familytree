@@ -180,9 +180,22 @@ export default function TreePage() {
   // Sticky note handlers
   const handleAddNote = useCallback(async () => {
     const supabase = createClient()
+    // Get viewport transform from ReactFlow's internal DOM transform
+    const vpEl = document.querySelector('.react-flow__viewport') as HTMLElement
+    let cx = 0, cy = 0
+    if (vpEl) {
+      const matrix = new DOMMatrix(window.getComputedStyle(vpEl).transform)
+      const container = vpEl.closest('.react-flow') as HTMLElement
+      const w = container?.offsetWidth ?? 800
+      const h = container?.offsetHeight ?? 600
+      // Invert the transform to get canvas coords
+      const scale = matrix.a || 1
+      cx = (w / 2 - matrix.e) / scale
+      cy = (h / 2 - matrix.f) / scale
+    }
     const { data } = await supabase.from('tree_notes').insert({
       user_id: userId, content: '', color: '#f5e642',
-      position_x: 100 + Math.random() * 200, position_y: 100 + Math.random() * 200,
+      position_x: cx - 100, position_y: cy - 80,
     }).select().single()
     if (data) setTreeNotes(prev => [...prev, data])
   }, [userId])
