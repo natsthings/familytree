@@ -356,12 +356,16 @@ export default function TreePage() {
           }
         })
         savePositions(updated)
-        // Save sticky note positions
-        updated.filter(n => n.type === 'stickyNote').forEach(n => {
-          if (changes.some(c => c.type === 'position' && c.id === n.id && c.dragging === false)) {
-            handleNotePositionSave(n.id, n.position.x, n.position.y)
-          }
-        })
+        // Save sticky note positions and update treeNotes state so rebuild doesn't reset them
+        const movedNotes = updated.filter(n => n.type === 'stickyNote' &&
+          changes.some(c => c.type === 'position' && c.id === n.id && (c as any).dragging === false))
+        if (movedNotes.length > 0) {
+          movedNotes.forEach(n => handleNotePositionSave(n.id, n.position.x, n.position.y))
+          setTreeNotes(prev => prev.map(note => {
+            const moved = movedNotes.find(n => n.id === note.id)
+            return moved ? { ...note, position_x: moved.position.x, position_y: moved.position.y } : note
+          }))
+        }
       }
       return updated
     })
