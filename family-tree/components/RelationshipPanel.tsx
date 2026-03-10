@@ -130,7 +130,7 @@ export default function RelationshipPanel({ member, allMembers, allRelationships
         const otherId = r.source_id === member.id ? r.target_id : r.source_id
         const other = allMembers.find(m => m.id === otherId)
         // Determine label from this person's perspective
-        let label = r.relation_type
+        let label: string = r.relation_type
         if (r.relation_type === 'parent') {
           label = r.source_id === member.id ? 'Parent of' : 'Child of'
         } else if (r.relation_type === 'child') {
