@@ -120,7 +120,8 @@ export default function MemberModal({
           p_death_date: deathDate || null,
           p_birth_year: birthYear ? parseInt(birthYear) : (birthDate ? parseInt(birthDate.split('-')[0]) : null),
           p_death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
-          p_social_links: JSON.parse(JSON.stringify(socialLinks.filter(l => l.url.trim()))),
+          p_social_links: JSON.parse(JSON.stringify(socialLinks.filter((l: any) => l.url?.trim()))),
+          p_is_deceased: isDeceased,
         })
         if (nameError) throw nameError
       } else if (mode === 'add') {
