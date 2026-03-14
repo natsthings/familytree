@@ -39,7 +39,7 @@ function findRelationship(
     } else if (type === 'spouse') {
       graph[r.source_id]?.push({ id: r.target_id, type: 'spouse', direction: 'lateral' })
       graph[r.target_id]?.push({ id: r.source_id, type: 'spouse', direction: 'lateral' })
-    } else if (type === 'sibling' || type === 'step_sibling') {
+    } else if (type === 'sibling' || type === 'step_sibling' || type === 'half_sibling') {
       graph[r.source_id]?.push({ id: r.target_id, type, direction: 'lateral' })
       graph[r.target_id]?.push({ id: r.source_id, type, direction: 'lateral' })
     }
@@ -75,6 +75,7 @@ function interpretPath(path: Array<{ id: string; type: string; direction: string
     if (t === 'spouse') return 'your spouse / partner'
     if (t === 'sibling') return 'your sibling'
     if (t === 'step_sibling') return 'your step-sibling'
+    if (t === 'half_sibling') return 'your half-sibling'
   }
   if (path.length === 2) {
     const [a, b] = path.map(p => p.type)
@@ -118,7 +119,7 @@ function interpretPath(path: Array<{ id: string; type: string; direction: string
   const ups = types.filter(t => t === 'parent').length
   const downs = types.filter(t => t === 'child').length
   const hasSpouse = types.includes('spouse')
-  const hasSibling = types.includes('sibling') || types.includes('step_sibling')
+  const hasSibling = types.includes('sibling') || types.includes('step_sibling') || types.includes('half_sibling')
 
   // Pure ascent: parent, grandparent, great-grandparent...
   if (ups > 0 && downs === 0 && !hasSpouse && !hasSibling) {
@@ -177,6 +178,8 @@ export default function RelationshipPanel({ member, allMembers, allRelationships
           label = 'Sibling'
         } else if (r.relation_type === 'step_sibling') {
           label = 'Step-Sibling'
+        } else if (r.relation_type === 'half_sibling') {
+          label = 'Half-Sibling'
         } else {
           label = r.label ?? 'Other'
         }
