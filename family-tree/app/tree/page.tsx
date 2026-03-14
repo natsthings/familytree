@@ -41,7 +41,7 @@ function edgeStyle(relType: string) {
   const color = relType === 'spouse' ? '#b06080'
     : relType === 'sibling' ? '#507090'
     : relType === 'step_sibling' ? '#706040'
-    : relType === 'half_sibling' ? '#407060'
+    : relType === 'half_sibling' ? '#7060a0'
     : relType === 'other' ? '#607060'
     : '#c49040'
   return { isHorizontal, isSpouse, color, sourceHandle: isHorizontal ? 'right' : 'bottom', targetHandle: isHorizontal ? 'left' : 'top' }
@@ -570,7 +570,7 @@ export default function TreePage() {
       {/* Legend */}
       <div style={{ position: 'absolute', top: 70, right: 16, zIndex: 10, background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020', borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(8px)', minWidth: 160 }}>
         <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Legend</div>
-        {[['→', '#c49040', 'Parent → Child'], ['♥', '#b06080', 'Spouse'], ['—', '#507090', 'Sibling'], ['╌', '#706040', 'Step-Sibling'], ['—', '#607060', 'Other']].map(([icon, color, label]) => (
+        {[['→', '#c49040', 'Parent → Child'], ['♥', '#b06080', 'Spouse'], ['—', '#507090', 'Sibling'], ['╌', '#706040', 'Step-Sibling'], ['┄', '#7060a0', 'Half-Sibling'], ['—', '#607060', 'Other']].map(([icon, color, label]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
             <span style={{ color, fontSize: icon === '♥' ? 14 : 16, lineHeight: 1 }}>{icon}</span>
             <span style={{ fontFamily: 'Lora, serif', fontSize: 11, color }}>{label}</span>
