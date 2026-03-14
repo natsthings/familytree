@@ -36,11 +36,12 @@ const nodeTypes = { memberNode: MemberNode, stickyNote: StickyNoteNode }
 
 function edgeStyle(relType: string) {
   const isSpouse = relType === 'spouse'
-  const isSibling = relType === 'sibling' || relType === 'step_sibling'
+  const isSibling = relType === 'sibling' || relType === 'step_sibling' || relType === 'half_sibling'
   const isHorizontal = isSpouse || isSibling
   const color = relType === 'spouse' ? '#b06080'
     : relType === 'sibling' ? '#507090'
     : relType === 'step_sibling' ? '#706040'
+    : relType === 'half_sibling' ? '#407060'
     : relType === 'other' ? '#607060'
     : '#c49040'
   return { isHorizontal, isSpouse, color, sourceHandle: isHorizontal ? 'right' : 'bottom', targetHandle: isHorizontal ? 'left' : 'top' }
@@ -278,6 +279,7 @@ export default function TreePage() {
         if (type === 'spouse') return `${srcName} & ${tgtName} · Spouses`
         if (type === 'sibling') return `${srcName} & ${tgtName} · Siblings`
         if (type === 'step_sibling') return `${srcName} & ${tgtName} · Step-Siblings`
+        if (type === 'half_sibling') return `${srcName} & ${tgtName} · Half-Siblings`
         return `${srcName} & ${tgtName} · ${(r as any).label ?? type}`
       }
       const tooltipLabel = src && tgt ? relVerb(r.relation_type, src.name, tgt.name) : r.relation_type
@@ -293,7 +295,7 @@ export default function TreePage() {
         label: r.label ? r.label : isSpouse ? '♥' : '',
         labelStyle: { fill: isSpouse ? '#b06080' : '#b8a882', fontFamily: 'Lora, serif', fontSize: isSpouse ? 14 : 11, fontStyle: 'italic' },
         labelBgStyle: { fill: '#1c1610', fillOpacity: 0.85 },
-        style: { stroke: color, strokeWidth: isSpouse ? 2 : 1.5, strokeDasharray: isSpouse ? '6 3' : r.relation_type === 'step_sibling' ? '5 4' : undefined },
+        style: { stroke: color, strokeWidth: isSpouse ? 2 : 1.5, strokeDasharray: isSpouse ? '6 3' : r.relation_type === 'step_sibling' ? '5 4' : r.relation_type === 'half_sibling' ? '8 3 2 3' : undefined },
         markerEnd: !isHorizontal ? { type: MarkerType.ArrowClosed, color, width: 14, height: 14 } : undefined,
         animated: isSpouse,
       }
