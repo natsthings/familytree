@@ -443,7 +443,7 @@ export default function TreePage() {
     router.replace('/login')
   }
 
-  function handleModalSaved(deletedMemberId?: string) {
+  async function handleModalSaved(deletedMemberId?: string) {
     setModal(null)
     setPendingConnect(null)
     if (deletedMemberId) {
@@ -452,7 +452,21 @@ export default function TreePage() {
       setPrivateRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
       setPrivateMemberIds(prev => { const next = new Set(prev); next.delete(deletedMemberId); return next })
     } else {
-      loadData()
+      // Surgically refresh just members and relationships — don't reload positions
+      const supabase = createClient()
+      const [{ data: membersData }, { data: relsData }] = await Promise.all([
+        supabase.from('members').select('*'),
+        supabase.from('relationships').select('*'),
+      ])
+      if (membersData) {
+        // Apply cached positions so dragged nodes don't snap back
+        const updated = membersData.map((m: any) => {
+          const cached = publicPosCache.current[m.id]
+          return cached ? { ...m, position_x: cached.x, position_y: cached.y } : m
+        })
+        setMembers(updated)
+      }
+      if (relsData) setRelationships(relsData)
     }
   }
 
@@ -607,7 +621,7 @@ export default function TreePage() {
               allMembers={members}
               allRelationships={[...relationships, ...privateRelationships]}
               currentUserMemberId={members.find(m => m.claimed_by === userId)?.id ?? null}
-              viewportCenter={getViewportCenter()}
+
             />
           )}
           {deleteRequest && userId && (
