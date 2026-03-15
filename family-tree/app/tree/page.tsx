@@ -118,6 +118,8 @@ export default function TreePage() {
 
     setMembers(allMembers)
     setTreeNotes(notesData ?? [])
+    // Seed public pos cache from loaded positions so it starts current
+    allMembers.forEach((m: any) => { publicPosCache.current[m.id] = { x: m.position_x, y: m.position_y } })
     setRelationships(relsData ?? [])
 
     if (isAdmin) {
@@ -240,6 +242,8 @@ export default function TreePage() {
       type: 'memberNode',
       position: privateMemberIds.has(m.id) && privatePosCache.current[m.id]
         ? { x: privatePosCache.current[m.id].x, y: privatePosCache.current[m.id].y }
+        : !privateMemberIds.has(m.id) && publicPosCache.current[m.id]
+        ? { x: publicPosCache.current[m.id].x, y: publicPosCache.current[m.id].y }
         : { x: m.position_x, y: m.position_y },
       data: {
         member: { ...m, _isPrivate: privateMemberIds.has(m.id) },
@@ -351,10 +355,14 @@ export default function TreePage() {
       const updated = applyNodeChanges(changes, nds)
       const hasMoved = changes.some((c) => c.type === 'position' && c.dragging === false)
       if (hasMoved) {
-        // Cache positions for private members so toggling modes doesn't reset them
+        // Cache positions for all members so re-renders don't reset them
         updated.forEach(n => {
-          if (privateMemberIds.has(n.id)) {
-            privatePosCache.current[n.id] = { x: n.position.x, y: n.position.y }
+          if (n.type !== 'stickyNote') {
+            if (privateMemberIds.has(n.id)) {
+              privatePosCache.current[n.id] = { x: n.position.x, y: n.position.y }
+            } else {
+              publicPosCache.current[n.id] = { x: n.position.x, y: n.position.y }
+            }
           }
         })
         savePositions(updated)
