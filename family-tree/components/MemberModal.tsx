@@ -22,7 +22,6 @@ interface MemberModalProps {
   allMembers?: Member[]
   allRelationships?: import('@/lib/types').Relationship[]
   currentUserMemberId?: string | null
-  viewportCenter?: { x: number; y: number }
 }
 
 const SOCIAL_TYPES = [
@@ -37,7 +36,7 @@ const SOCIAL_TYPES = [
 ]
 
 export default function MemberModal({
-  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers, allRelationships = [], currentUserMemberId = null, viewportCenter,
+  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers, allRelationships = [], currentUserMemberId = null,
 }: MemberModalProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -140,8 +139,8 @@ export default function MemberModal({
           origins: origins,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
-          position_x: (viewportCenter?.x ?? 0) + (Math.random() * 60 - 30),
-          position_y: (viewportCenter?.y ?? 0) + (Math.random() * 60 - 30),
+          position_x: (() => { const v = document.querySelector('.react-flow__viewport') as HTMLElement; if (!v) return 0; const m = new DOMMatrix(getComputedStyle(v).transform); const c = v.closest('.react-flow') as HTMLElement; return (((c?.offsetWidth??800)/2) - m.e) / (m.a||1) })() + (Math.random() * 60 - 30),
+          position_y: (() => { const v = document.querySelector('.react-flow__viewport') as HTMLElement; if (!v) return 0; const m = new DOMMatrix(getComputedStyle(v).transform); const c = v.closest('.react-flow') as HTMLElement; return (((c?.offsetHeight??600)/2) - m.f) / (m.a||1) })() + (Math.random() * 60 - 30),
         })
         if (error) throw error
       } else if (mode === 'connect') {
@@ -156,7 +155,7 @@ export default function MemberModal({
             death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
             social_links: [],
             ...(privateMode ? {} : { is_root: false }),
-            position_x: (viewportCenter?.x ?? sourceForConnect?.position_x ?? 0) + (Math.random() * 60 - 30),
+            position_x: (() => { const v = document.querySelector('.react-flow__viewport') as HTMLElement; if (!v) return sourceForConnect?.position_x ?? 0; const m = new DOMMatrix(getComputedStyle(v).transform); const c = v.closest('.react-flow') as HTMLElement; return (((c?.offsetWidth??800)/2) - m.e) / (m.a||1) })() + (Math.random() * 60 - 30),
             position_y: (sourceForConnect?.position_y ?? 0) + 180,
           }).select().single()
           if (memberError || !newMember) throw memberError
