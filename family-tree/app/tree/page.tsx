@@ -121,6 +121,7 @@ export default function TreePage() {
     setTreeNotes(notesData ?? [])
     // Seed public pos cache from loaded positions so it starts current
     allMembers.forEach((m: any) => { publicPosCache.current[m.id] = { x: m.position_x, y: m.position_y } })
+    initialEdgesLoaded.current = false // allow full edge sync on reload
     setRelationships(relsData ?? [])
 
     if (isAdmin) {
@@ -306,7 +307,24 @@ export default function TreePage() {
     })
   }, [relationships, privateRelationships, members, privateMode])
 
-  useEffect(() => { setLocalEdges(builtEdges) }, [builtEdges])
+  const initialEdgesLoaded = useRef(false)
+  useEffect(() => {
+    if (!initialEdgesLoaded.current) {
+      // First load — just set them
+      setLocalEdges(builtEdges)
+      initialEdgesLoaded.current = true
+      return
+    }
+    // On subsequent updates (new member added, edited etc):
+    // Only ADD new edges that don't exist yet — never restore deleted ones
+    setLocalEdges(prev => {
+      const existingIds = new Set(prev.map(e => e.id))
+      const newEdges = builtEdges.filter(e => !existingIds.has(e.id))
+      // Also update existing edges in case labels/styles changed
+      const updated = prev.map(e => builtEdges.find(b => b.id === e.id) ?? e)
+      return [...updated, ...newEdges]
+    })
+  }, [builtEdges])
 
   // Position saving — everyone saves their own view to member_positions
   // Admin additionally updates the master positions on members table
@@ -381,11 +399,12 @@ export default function TreePage() {
     })
   }, [savePositions, privateMemberIds, handleNotePositionSave])
 
+  const pendingDeletes = useRef<Set<string>>(new Set())
+
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     const removals = changes.filter((c) => c.type === 'remove')
     if (removals.length > 0) {
       if (!isAdmin) {
-        // Non-admin: show delete request for each removed edge
         const ids = removals.map(c => c.id)
         const rel = relationships.find(r => ids.includes(r.id))
         if (rel) {
@@ -393,24 +412,29 @@ export default function TreePage() {
           const tgt = members.find(m => m.id === rel.target_id)
           setDeleteRequest({ targetType: 'relationship', targetId: rel.id, description: `${src?.name ?? '?'} ↔ ${tgt?.name ?? '?'} (${rel.relation_type})` })
         }
-        return // don't remove from local state
+        return
       }
       const supabase = createClient()
       const ids = removals.map((c) => c.id)
-      // Check if this is a private relationship
       const privateIds = ids.filter(id => privateRelationships.some(r => r.id === id))
       const publicIds = ids.filter(id => !privateIds.includes(id))
+      // Track pending deletes so surgical refresh doesn't restore them
+      publicIds.forEach(id => pendingDeletes.current.add(id))
       if (privateIds.length > 0) {
         setPrivateRelationships(prev => prev.filter(r => !privateIds.includes(r.id)))
-        privateIds.forEach(id => supabase.from('private_relationships').delete().eq('id', id))
+        Promise.all(privateIds.map(id => supabase.from('private_relationships').delete().eq('id', id)))
       }
       if (publicIds.length > 0) {
-        setRelationships((prev) => prev.filter((r) => !publicIds.includes(r.id)))
-        publicIds.forEach((id) => supabase.from('relationships').delete().eq('id', id))
+        setRelationships(prev => prev.filter(r => !publicIds.includes(r.id)))
+        Promise.all(publicIds.map(id =>
+          supabase.from('relationships').delete().eq('id', id).then(() => {
+            pendingDeletes.current.delete(id)
+          })
+        ))
       }
     }
     setLocalEdges((eds) => applyEdgeChanges(changes, eds))
-  }, [isAdmin, relationships, members])
+  }, [isAdmin, relationships, members, privateRelationships])
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return
@@ -466,7 +490,7 @@ export default function TreePage() {
         })
         setMembers(updated)
       }
-      if (relsData) setRelationships(relsData)
+      if (relsData) setRelationships(relsData.filter((r: any) => !pendingDeletes.current.has(r.id)))
     }
   }
 
