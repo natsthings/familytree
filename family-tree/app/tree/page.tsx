@@ -59,6 +59,7 @@ export default function TreePage() {
   const [treeNotes, setTreeNotes] = useState<any[]>([])
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
   const privatePosCache = useRef<Record<string, { x: number; y: number }>>({})
+  const publicPosCache = useRef<Record<string, { x: number; y: number }>>({})
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
