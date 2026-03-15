@@ -22,6 +22,7 @@ interface MemberModalProps {
   allMembers?: Member[]
   allRelationships?: import('@/lib/types').Relationship[]
   currentUserMemberId?: string | null
+  viewportCenter?: { x: number; y: number }
 }
 
 const SOCIAL_TYPES = [
@@ -36,7 +37,7 @@ const SOCIAL_TYPES = [
 ]
 
 export default function MemberModal({
-  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers, allRelationships = [], currentUserMemberId = null,
+  mode, member, sourceForConnect, userId, isAdmin = false, privateMode = false, onClose, onSaved, onRequestDelete, pendingTargetId, allMembers, allRelationships = [], currentUserMemberId = null, viewportCenter,
 }: MemberModalProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -139,8 +140,8 @@ export default function MemberModal({
           origins: origins,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
-          position_x: 0 + (Math.random() * 100 - 50),
-          position_y: 0 + (Math.random() * 100 - 50),
+          position_x: (viewportCenter?.x ?? 0) + (Math.random() * 60 - 30),
+          position_y: (viewportCenter?.y ?? 0) + (Math.random() * 60 - 30),
         })
         if (error) throw error
       } else if (mode === 'connect') {
@@ -155,7 +156,7 @@ export default function MemberModal({
             death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
             social_links: [],
             ...(privateMode ? {} : { is_root: false }),
-            position_x: (sourceForConnect?.position_x ?? 0) + (Math.random() * 200 - 100),
+            position_x: (viewportCenter?.x ?? sourceForConnect?.position_x ?? 0) + (Math.random() * 60 - 30),
             position_y: (sourceForConnect?.position_y ?? 0) + 180,
           }).select().single()
           if (memberError || !newMember) throw memberError
