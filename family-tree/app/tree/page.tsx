@@ -248,15 +248,12 @@ export default function TreePage() {
       privateMode ? true : !privateMemberIds.has(m.id)
     )
 
-    // Compute auto-layout positions anchored on the signed-in user
-    // Only on first load (or when explicitly reset) — after that use cached positions
+    // Compute auto-layout on first load (or after reset) — overwrites DB positions
     if (!autoLayoutApplied.current && myMemberId) {
       const layoutPositions = computeAutoLayout(visibleMembers, allRelsForLayout, myMemberId)
-      // Seed publicPosCache with auto-layout positions (only for members not yet cached)
+      // Always seed cache from layout (ignoring stale DB positions)
       visibleMembers.forEach(m => {
-        if (!publicPosCache.current[m.id] && layoutPositions[m.id]) {
-          publicPosCache.current[m.id] = layoutPositions[m.id]
-        }
+        if (layoutPositions[m.id]) publicPosCache.current[m.id] = layoutPositions[m.id]
       })
       autoLayoutApplied.current = true
     }
