@@ -21,7 +21,6 @@ import WelcomeLetter from '@/components/WelcomeLetter'
 import DeleteRequestModal from '@/components/DeleteRequestModal'
 import MessageBox from '@/components/MessageBox'
 import { LogOut, Plus, TreePine, Save, Mail } from 'lucide-react'
-import { computeAutoLayout } from '@/lib/autoLayout'
 
 const ADMIN_EMAIL = 'nataliabern2007nb@gmail.com'
 
@@ -61,9 +60,6 @@ export default function TreePage() {
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
   const privatePosCache = useRef<Record<string, { x: number; y: number }>>({})
   const publicPosCache = useRef<Record<string, { x: number; y: number }>>({})
-  const [myMemberId, setMyMemberId] = useState<string | null>(null)
-  const autoLayoutApplied = useRef(false)
-  const savedMemberIds = useRef<Set<string>>(new Set())
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -114,8 +110,6 @@ export default function TreePage() {
       supabase.from('tree_notes').select('*'),
     ])
 
-    const savedPositionIds = new Set((myPositions ?? []).map((p: any) => p.member_id))
-    savedMemberIds.current = savedPositionIds
     const allMembers = (membersData ?? []).map((m: any) => {
       const myPos = myPositions?.find((p: any) => p.member_id === m.id)
       return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
@@ -168,10 +162,7 @@ export default function TreePage() {
     }
 
     const myProfile = allMembers.find((m: any) => m.claimed_by === userId)
-    if (myProfile) {
-      setUserName(myProfile.name)
-      setMyMemberId(myProfile.id)
-    }
+    if (myProfile) setUserName(myProfile.name)
 
     setLoading(false)
   }
@@ -242,27 +233,10 @@ export default function TreePage() {
     return () => window.removeEventListener('sticky-color', handler)
   }, [])
 
-  const allRelsForLayout = useMemo(() =>
-    privateMode ? [...relationships, ...privateRelationships] : relationships
-  , [relationships, privateRelationships, privateMode])
-
   useEffect(() => {
     const visibleMembers = members.filter(m =>
       privateMode ? true : !privateMemberIds.has(m.id)
     )
-
-    // Apply auto-layout only for members without saved positions
-    if (!autoLayoutApplied.current && myMemberId) {
-      const layoutPositions = computeAutoLayout(visibleMembers, allRelsForLayout, myMemberId)
-      visibleMembers.forEach(m => {
-        if (!savedMemberIds.current.has(m.id) && layoutPositions[m.id]) {
-          // No saved position — use auto-layout
-          publicPosCache.current[m.id] = layoutPositions[m.id]
-        }
-        // If they have a saved position, publicPosCache already has it from loadData
-      })
-      autoLayoutApplied.current = true
-    }
 
     const newNodes: Node[] = visibleMembers.map((m) => {
       const pos = privateMemberIds.has(m.id)
@@ -296,7 +270,7 @@ export default function TreePage() {
       },
     }))
     setNodes([...newNodes, ...noteNodes])
-  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote, myMemberId, allRelsForLayout])
+  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
@@ -598,13 +572,12 @@ export default function TreePage() {
           <button onClick={handleAddNote} title="Add sticky note" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,230,66,0.1)', color: '#f5e642', border: '1px solid rgba(245,230,66,0.25)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 15 }}>
             📌
           </button>
-          <button onClick={() => {
-            // Recompute auto-layout from scratch
-            publicPosCache.current = {}
-            autoLayoutApplied.current = false
-            // Force re-render by toggling members
-            setMembers(prev => [...prev])
-          }} title="Reset to auto layout" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+          <button onClick={async () => {
+            if (!confirm('Reset your layout to the default view?')) return
+            const supabase = createClient()
+            await supabase.rpc('reset_user_positions', { p_user_id: userId })
+            loadData()
+          }} title="Reset layout to default" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
             ↺
           </button>
           <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
