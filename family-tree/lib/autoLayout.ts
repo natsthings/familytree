@@ -53,16 +53,16 @@ export function computeAutoLayout(
   while (queue.length > 0) {
     const id = queue.shift()!
     const lvl = levels[id]
-    for (const pid of parentsOf[id]) {
+    for (const pid of Array.from(parentsOf[id])) {
       if (!visited.has(pid)) { visited.add(pid); levels[pid] = lvl - 1; queue.push(pid) }
     }
-    for (const cid of childrenOf[id]) {
+    for (const cid of Array.from(childrenOf[id])) {
       if (!visited.has(cid)) { visited.add(cid); levels[cid] = lvl + 1; queue.push(cid) }
     }
-    for (const sid of spousesOf[id]) {
+    for (const sid of Array.from(spousesOf[id])) {
       if (!visited.has(sid)) { visited.add(sid); levels[sid] = lvl; queue.push(sid) }
     }
-    for (const sid of siblingsOf[id]) {
+    for (const sid of Array.from(siblingsOf[id])) {
       if (!visited.has(sid)) { visited.add(sid); levels[sid] = lvl; queue.push(sid) }
     }
   }
@@ -91,7 +91,7 @@ export function computeAutoLayout(
     const placeWithSpouses = (id: string) => {
       if (placed.has(id) || !ids.includes(id)) return
       placed.add(id); ordered.push(id)
-      for (const sid of spousesOf[id]) {
+      for (const sid of Array.from(spousesOf[id])) {
         if (!placed.has(sid) && ids.includes(sid)) { placed.add(sid); ordered.push(sid) }
       }
     }
@@ -107,7 +107,7 @@ export function computeAutoLayout(
         const cid = cq.shift()!
         if (cs.has(cid) || !ids.includes(cid)) continue
         cs.add(cid); cluster.push(cid)
-        for (const sib of siblingsOf[cid]) if (!cs.has(sib)) cq.push(sib)
+        for (const sib of Array.from(siblingsOf[cid])) if (!cs.has(sib)) cq.push(sib)
       }
       for (const cid of cluster) placeWithSpouses(cid)
     }
@@ -136,11 +136,11 @@ export function computeAutoLayout(
     // Group by shared parent set
     const parentGroups = new Map<string, string[]>()
     for (const id of ordered) {
-      const myParents = [...parentsOf[id]].filter(p => p in positions)
+      const myParents = Array.from(parentsOf[id]).filter(p => p in positions)
       // Include spouses of parents as co-parents
       const coParents = new Set(myParents)
-      for (const p of myParents) for (const sp of spousesOf[p]) if (sp in positions) coParents.add(sp)
-      const key = [...coParents].sort().join(',') || '__none__'
+      for (const p of myParents) for (const sp of Array.from(spousesOf[p])) if (sp in positions) coParents.add(sp)
+      const key = Array.from(coParents).sort().join(',') || '__none__'
       if (!parentGroups.has(key)) parentGroups.set(key, [])
       parentGroups.get(key)!.push(id)
     }
