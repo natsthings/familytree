@@ -21,6 +21,7 @@ import WelcomeLetter from '@/components/WelcomeLetter'
 import DeleteRequestModal from '@/components/DeleteRequestModal'
 import MessageBox from '@/components/MessageBox'
 import { LogOut, Plus, TreePine, Save, Mail } from 'lucide-react'
+import { computeAutoLayout } from '@/lib/autoLayout'
 
 const ADMIN_EMAIL = 'nataliabern2007nb@gmail.com'
 
@@ -60,6 +61,8 @@ export default function TreePage() {
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
   const privatePosCache = useRef<Record<string, { x: number; y: number }>>({})
   const publicPosCache = useRef<Record<string, { x: number; y: number }>>({})
+  const [myMemberId, setMyMemberId] = useState<string | null>(null)
+  const autoLayoutApplied = useRef(false)
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -162,7 +165,10 @@ export default function TreePage() {
     }
 
     const myProfile = allMembers.find((m: any) => m.claimed_by === userId)
-    if (myProfile) setUserName(myProfile.name)
+    if (myProfile) {
+      setUserName(myProfile.name)
+      setMyMemberId(myProfile.id)
+    }
 
     setLoading(false)
   }
@@ -233,28 +239,47 @@ export default function TreePage() {
     return () => window.removeEventListener('sticky-color', handler)
   }, [])
 
+  const allRelsForLayout = useMemo(() =>
+    privateMode ? [...relationships, ...privateRelationships] : relationships
+  , [relationships, privateRelationships, privateMode])
+
   useEffect(() => {
     const visibleMembers = members.filter(m =>
-      // In public mode, hide private members
       privateMode ? true : !privateMemberIds.has(m.id)
     )
-    const newNodes: Node[] = visibleMembers.map((m) => ({
-      id: m.id,
-      type: 'memberNode',
-      position: privateMemberIds.has(m.id) && privatePosCache.current[m.id]
-        ? { x: privatePosCache.current[m.id].x, y: privatePosCache.current[m.id].y }
-        : !privateMemberIds.has(m.id) && publicPosCache.current[m.id]
-        ? { x: publicPosCache.current[m.id].x, y: publicPosCache.current[m.id].y }
-        : { x: m.position_x, y: m.position_y },
-      data: {
-        member: { ...m, _isPrivate: privateMemberIds.has(m.id) },
-        currentUserId: userId,
-        isAdmin,
-        onEdit: (member: Member) => setModal({ mode: 'edit', member }),
-        onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
-        onMessage: (m: Member) => { if (m.claimed_by) setMessageBox({ toUserId: m.claimed_by, toUserName: m.name }) },
-      },
-    }))
+
+    // Compute auto-layout positions anchored on the signed-in user
+    // Only on first load (or when explicitly reset) — after that use cached positions
+    if (!autoLayoutApplied.current && myMemberId) {
+      const layoutPositions = computeAutoLayout(visibleMembers, allRelsForLayout, myMemberId)
+      // Seed publicPosCache with auto-layout positions (only for members not yet cached)
+      visibleMembers.forEach(m => {
+        if (!publicPosCache.current[m.id] && layoutPositions[m.id]) {
+          publicPosCache.current[m.id] = layoutPositions[m.id]
+        }
+      })
+      autoLayoutApplied.current = true
+    }
+
+    const newNodes: Node[] = visibleMembers.map((m) => {
+      const pos = privateMemberIds.has(m.id)
+        ? (privatePosCache.current[m.id] ?? { x: m.position_x, y: m.position_y })
+        : (publicPosCache.current[m.id] ?? { x: m.position_x, y: m.position_y })
+      return {
+        id: m.id,
+        type: 'memberNode',
+        position: pos,
+        data: {
+          member: { ...m, _isPrivate: privateMemberIds.has(m.id) },
+          currentUserId: userId,
+          isAdmin,
+          onEdit: (member: Member) => setModal({ mode: 'edit', member }),
+          onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
+          onMessage: (m: Member) => { if (m.claimed_by) setMessageBox({ toUserId: m.claimed_by, toUserName: m.name }) },
+        },
+      }
+    })
+
     const noteNodes: Node[] = treeNotes.map(n => ({
       id: n.id,
       type: 'stickyNote',
@@ -268,7 +293,7 @@ export default function TreePage() {
       },
     }))
     setNodes([...newNodes, ...noteNodes])
-  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote])
+  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote, myMemberId, allRelsForLayout])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
@@ -333,8 +358,8 @@ export default function TreePage() {
       if (!userId) return
       setSaveStatus('saving')
       const supabase = createClient()
-      const privateNodes = updatedNodes.filter(n => privateMemberIds.has(n.id))
-      const publicNodes = updatedNodes.filter(n => !privateMemberIds.has(n.id))
+      const privateNodes = updatedNodes.filter(n => privateMemberIds.has(n.id) && n.type !== 'stickyNote')
+      const publicNodes = updatedNodes.filter(n => !privateMemberIds.has(n.id) && n.type !== 'stickyNote')
       // Save private member positions to private_member_positions
       if (privateNodes.length > 0) {
         await Promise.all(privateNodes.map(n =>
@@ -356,12 +381,7 @@ export default function TreePage() {
             position_y: n.position.y,
           }, { onConflict: 'user_id,member_id' })
         ))
-        // Admin also updates master layout for public nodes via security definer RPC
-        if (isAdmin) {
-          await Promise.all(publicNodes.map((n) =>
-            supabase.rpc('update_member_position', { p_member_id: n.id, p_x: n.position.x, p_y: n.position.y })
-          ))
-        }
+        // Master positions no longer used — layout is computed from relationships
       }
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 2000)
@@ -575,12 +595,13 @@ export default function TreePage() {
           <button onClick={handleAddNote} title="Add sticky note" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,230,66,0.1)', color: '#f5e642', border: '1px solid rgba(245,230,66,0.25)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 15 }}>
             📌
           </button>
-          <button onClick={async () => {
-            if (!confirm('Reset your layout to the default view?')) return
-            const supabase = createClient()
-            await supabase.rpc('reset_user_positions', { p_user_id: userId })
-            loadData()
-          }} title="Reset layout to default" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+          <button onClick={() => {
+            // Recompute auto-layout from scratch
+            publicPosCache.current = {}
+            autoLayoutApplied.current = false
+            // Force re-render by toggling members
+            setMembers(prev => [...prev])
+          }} title="Reset to auto layout" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
             ↺
           </button>
           <button onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
