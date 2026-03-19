@@ -59,7 +59,6 @@ export default function TreePage() {
   const [treeNotes, setTreeNotes] = useState<any[]>([])
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
   const privatePosCache = useRef<Record<string, { x: number; y: number }>>({})
-  const publicPosCache = useRef<Record<string, { x: number; y: number }>>({})
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -120,7 +119,6 @@ export default function TreePage() {
     setMembers(allMembers)
     setTreeNotes(notesData ?? [])
     // Seed public pos cache from loaded positions so it starts current
-    allMembers.forEach((m: any) => { publicPosCache.current[m.id] = { x: m.position_x, y: m.position_y } })
     initialEdgesLoaded.current = false // allow full edge sync on reload
     setRelationships(relsData ?? [])
 
@@ -241,7 +239,7 @@ export default function TreePage() {
     const newNodes: Node[] = visibleMembers.map((m) => {
       const pos = privateMemberIds.has(m.id)
         ? (privatePosCache.current[m.id] ?? { x: m.position_x, y: m.position_y })
-        : (publicPosCache.current[m.id] ?? { x: m.position_x, y: m.position_y })
+        : { x: m.position_x, y: m.position_y }
       return {
         id: m.id,
         type: 'memberNode',
@@ -376,7 +374,6 @@ export default function TreePage() {
             if (privateMemberIds.has(n.id)) {
               privatePosCache.current[n.id] = { x: n.position.x, y: n.position.y }
             } else {
-              publicPosCache.current[n.id] = { x: n.position.x, y: n.position.y }
             }
           }
         })
@@ -480,12 +477,7 @@ export default function TreePage() {
         supabase.from('relationships').select('*'),
       ])
       if (membersData) {
-        // Apply cached positions so dragged nodes don't snap back
-        const updated = membersData.map((m: any) => {
-          const cached = publicPosCache.current[m.id]
-          return cached ? { ...m, position_x: cached.x, position_y: cached.y } : m
-        })
-        setMembers(updated)
+        setMembers(membersData)
       }
       if (relsData) setRelationships(relsData.filter((r: any) => !pendingDeletes.current.has(r.id)))
     }
