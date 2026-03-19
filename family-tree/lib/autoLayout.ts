@@ -134,19 +134,20 @@ export function computeAutoLayout(
     const ordered = orderedByLevel[lvl]
 
     // Group by shared parent set
-    const parentGroups = new Map<string, string[]>()
+    const parentGroups: Record<string, string[]> = {}
     for (const id of ordered) {
       const myParents = Array.from(parentsOf[id]).filter(p => p in positions)
       // Include spouses of parents as co-parents
       const coParents = new Set(myParents)
       for (const p of myParents) for (const sp of Array.from(spousesOf[p])) if (sp in positions) coParents.add(sp)
       const key = Array.from(coParents).sort().join(',') || '__none__'
-      if (!parentGroups.has(key)) parentGroups.set(key, [])
-      parentGroups.get(key)!.push(id)
+      if (!parentGroups[key]) parentGroups[key] = []
+      parentGroups[key].push(id)
     }
 
     const desiredX: Record<string, number> = {}
-    for (const [key, group] of parentGroups) {
+    for (const key of Object.keys(parentGroups)) {
+      const group = parentGroups[key]
       if (key === '__none__') continue
       const parentXs = key.split(',').map(pid => positions[pid].x)
       const centerX = parentXs.reduce((a, b) => a + b, 0) / parentXs.length
