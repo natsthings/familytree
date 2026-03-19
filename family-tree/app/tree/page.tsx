@@ -63,6 +63,7 @@ export default function TreePage() {
   const publicPosCache = useRef<Record<string, { x: number; y: number }>>({})
   const [myMemberId, setMyMemberId] = useState<string | null>(null)
   const autoLayoutApplied = useRef(false)
+  const savedMemberIds = useRef<Set<string>>(new Set())
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -113,6 +114,8 @@ export default function TreePage() {
       supabase.from('tree_notes').select('*'),
     ])
 
+    const savedPositionIds = new Set((myPositions ?? []).map((p: any) => p.member_id))
+    savedMemberIds.current = savedPositionIds
     const allMembers = (membersData ?? []).map((m: any) => {
       const myPos = myPositions?.find((p: any) => p.member_id === m.id)
       return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
@@ -248,12 +251,15 @@ export default function TreePage() {
       privateMode ? true : !privateMemberIds.has(m.id)
     )
 
-    // Compute auto-layout on first load (or after reset) — overwrites DB positions
+    // Apply auto-layout only for members without saved positions
     if (!autoLayoutApplied.current && myMemberId) {
       const layoutPositions = computeAutoLayout(visibleMembers, allRelsForLayout, myMemberId)
-      // Always seed cache from layout (ignoring stale DB positions)
       visibleMembers.forEach(m => {
-        if (layoutPositions[m.id]) publicPosCache.current[m.id] = layoutPositions[m.id]
+        if (!savedMemberIds.current.has(m.id) && layoutPositions[m.id]) {
+          // No saved position — use auto-layout
+          publicPosCache.current[m.id] = layoutPositions[m.id]
+        }
+        // If they have a saved position, publicPosCache already has it from loadData
       })
       autoLayoutApplied.current = true
     }
