@@ -78,6 +78,7 @@ export default function TreePage() {
   const [searchResults, setSearchResults] = useState<Member[]>([])
   const [showSearchResults, setShowSearchResults] = useState(false)
   const flowInstance = useRef<ReactFlowInstance | null>(null)
+  const [cardSize, setCardSize] = useState<'compact' | 'normal' | 'detailed'>('normal')
   const undoStack = useRef<Array<{
     type: 'delete_edge'
     rel: any
@@ -265,6 +266,7 @@ export default function TreePage() {
           member: { ...m, _isPrivate: privateMemberIds.has(m.id) },
           currentUserId: userId,
           isAdmin,
+          cardSize,
           onEdit: (member: Member) => setModal({ mode: 'edit', member }),
           onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
           onMessage: (m: Member) => { if (m.claimed_by) setMessageBox({ toUserId: m.claimed_by, toUserName: m.name }) },
@@ -285,7 +287,7 @@ export default function TreePage() {
       },
     }))
     setNodes([...newNodes, ...noteNodes])
-  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote])
+  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote, cardSize])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
@@ -513,15 +515,37 @@ export default function TreePage() {
     }
   }, [members, relationships])
 
-  // Ctrl+Z listener
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA'
+
+      // Ctrl/Cmd+Z — undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        const tag = (e.target as HTMLElement)?.tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        if (inInput) return
         e.preventDefault()
         handleUndo()
+        return
       }
+      if (inInput) return
+
+      // N — new member
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault()
+        setModal({ mode: 'add' })
+        return
+      }
+      // Escape — close modal
+      if (e.key === 'Escape') {
+        setModal(null)
+        setPendingConnect(null)
+        return
+      }
+      // 1/2/3 — card size
+      if (e.key === '1') { setCardSize('compact'); return }
+      if (e.key === '2') { setCardSize('normal'); return }
+      if (e.key === '3') { setCardSize('detailed'); return }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -680,6 +704,18 @@ export default function TreePage() {
           <button onClick={() => router.push('/timeline')} title="Timeline view" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             📅 Timeline
           </button>
+          <button onClick={() => router.push('/duplicates')} title="Find duplicates" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+            🔍 Duplicates
+          </button>
+          {/* Card size toggle */}
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', border: '1px solid #3a3020', borderRadius: 8, overflow: 'hidden' }}>
+            {(['compact', 'normal', 'detailed'] as const).map((size, i) => (
+              <button key={size} onClick={() => setCardSize(size)} title={`${size} cards (${i+1})`}
+                style={{ padding: '7px 10px', border: 'none', borderRight: i < 2 ? '1px solid #3a3020' : 'none', background: cardSize === size ? 'rgba(196,144,64,0.2)' : 'none', color: cardSize === size ? '#c49040' : '#b8a882', cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono, monospace' }}>
+                {size === 'compact' ? '▪' : size === 'normal' ? '▫' : '□'}
+              </button>
+            ))}
+          </div>
           {isAdmin && (
             <button onClick={() => router.push('/import')} title="Import GEDCOM" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
               📥 Import
@@ -715,7 +751,20 @@ export default function TreePage() {
         onEdgeMouseMove={onEdgeMouseMove}
         onEdgeMouseLeave={onEdgeMouseLeave}
         nodeTypes={nodeTypes}
-        onInit={(instance) => { flowInstance.current = instance }}
+        onInit={(instance) => {
+            flowInstance.current = instance
+            // Restore last viewport position from sessionStorage
+            const saved = sessionStorage.getItem('tree_viewport')
+            if (saved) {
+              try {
+                const { x, y, zoom } = JSON.parse(saved)
+                setTimeout(() => instance.setViewport({ x, y, zoom }, { duration: 0 }), 100)
+              } catch {}
+            }
+          }}
+          onMoveEnd={(_, viewport) => {
+            sessionStorage.setItem('tree_viewport', JSON.stringify(viewport))
+          }}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
