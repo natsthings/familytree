@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { parseGedcom } from '@/lib/parseGedcom'
@@ -8,6 +8,51 @@ import { parseGedcom } from '@/lib/parseGedcom'
 const ADMIN_EMAIL = 'nataliabern2007nb@gmail.com'
 
 type ImportStatus = 'idle' | 'parsing' | 'previewing' | 'importing' | 'done' | 'error'
+
+// Extract country from a place string like "London, England, United Kingdom" -> "United Kingdom"
+// or "Panama City, Panama" -> "Panama"
+function extractCountry(place: string | null): string | null {
+  if (!place) return null
+  const parts = place.split(',').map(p => p.trim()).filter(Boolean)
+  if (parts.length === 0) return null
+  // Last part is usually country
+  const last = parts[parts.length - 1]
+  // Filter out things that are clearly not countries (zip codes, "Unknown", etc.)
+  if (/^\d+$/.test(last)) return parts[parts.length - 2] ?? null
+  if (last.toLowerCase() === 'unknown' || last.toLowerCase() === 'usa') return 'United States'
+  if (last.toLowerCase() === 'uk') return 'United Kingdom'
+  return last
+}
+
+// Grid layout: place imported people in a clean grid starting from anchor position
+function computeImportPositions(
+  count: number,
+  anchorX: number,
+  anchorY: number,
+  direction: 'above' | 'below' | 'left' | 'right'
+): { x: number; y: number }[] {
+  const NODE_W = 240
+  const NODE_H = 160
+  const H_GAP = 60
+  const V_GAP = 80
+  const COLS = 6 // nodes per row
+
+  const positions: { x: number; y: number }[] = []
+  for (let i = 0; i < count; i++) {
+    const col = i % COLS
+    const row = Math.floor(i / COLS)
+    let x = anchorX + col * (NODE_W + H_GAP)
+    let y = anchorY
+
+    if (direction === 'above') y = anchorY - (row + 1) * (NODE_H + V_GAP)
+    else if (direction === 'below') y = anchorY + (row + 1) * (NODE_H + V_GAP)
+    else if (direction === 'left') x = anchorX - (row + 1) * (NODE_W + H_GAP) - col * (NODE_W + H_GAP)
+    else y = anchorY + row * (NODE_H + V_GAP) // right/default
+
+    positions.push({ x, y })
+  }
+  return positions
+}
 
 export default function ImportPage() {
   const router = useRouter()
@@ -18,17 +63,31 @@ export default function ImportPage() {
   const [progress, setProgress] = useState({ current: 0, total: 0, label: '' })
   const [gedcomData, setGedcomData] = useState<any>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
 
-  // Check auth on mount
-  useState(() => {
+  // Anchor state
+  const [existingMembers, setExistingMembers] = useState<any[]>([])
+  const [anchorMemberId, setAnchorMemberId] = useState<string>('')
+  const [anchorOffsetX, setAnchorOffsetX] = useState<number>(0)
+  const [anchorOffsetY, setAnchorOffsetY] = useState<number>(-2000)
+  const [anchorDirection, setAnchorDirection] = useState<'above' | 'below' | 'left' | 'right'>('above')
+  const [memberSearch, setMemberSearch] = useState('')
+
+  useEffect(() => {
     createClient().auth.getUser().then(({ data }) => {
       if (!data.user) { router.replace('/login'); return }
       if (data.user.email !== ADMIN_EMAIL) { router.replace('/tree'); return }
       setUserId(data.user.id)
-      setIsAdmin(true)
+      // Load existing members for anchor picker
+      createClient().from('members').select('id, name, birth_year, position_x, position_y').order('name')
+        .then(({ data: mems }) => setExistingMembers(mems ?? []))
     })
-  })
+  }, [])
+
+  const filteredMembers = existingMembers.filter(m =>
+    m.name.toLowerCase().includes(memberSearch.toLowerCase())
+  ).slice(0, 10)
+
+  const selectedAnchor = existingMembers.find(m => m.id === anchorMemberId)
 
   const handleFile = async (file: File) => {
     setStatus('parsing')
@@ -38,7 +97,6 @@ export default function ImportPage() {
       const data = parseGedcom(text)
       setGedcomData(data)
 
-      // Preview: check how many already exist
       const supabase = createClient()
       const { data: existing } = await supabase.from('members').select('name, birth_year')
       const existingSet = new Set(
@@ -66,18 +124,20 @@ export default function ImportPage() {
     const supabase = createClient()
 
     try {
-      // Load existing members to check duplicates
-      const { data: existing } = await supabase.from('members').select('id, name, birth_year')
-      const existingMap = new Map<string, string>() // key -> id
+      const { data: existing } = await supabase.from('members').select('id, name, birth_year, position_x, position_y')
+      const existingMap = new Map<string, string>()
       ;(existing ?? []).forEach((m: any) => {
         existingMap.set(`${m.name?.toLowerCase()}|${m.birth_year ?? ''}`, m.id)
       })
 
-      // Map GEDCOM id -> Supabase id
-      const idMap = new Map<string, string>()
+      // Compute anchor base position
+      const anchor = existingMembers.find(m => m.id === anchorMemberId)
+      const baseX = (anchor?.position_x ?? 0) + anchorOffsetX
+      const baseY = (anchor?.position_y ?? 0) + anchorOffsetY
 
-      // Insert persons
+      const idMap = new Map<string, string>()
       const { persons, families } = gedcomData
+
       const toInsert = persons.filter((p: any) => {
         const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
         if (existingMap.has(key)) {
@@ -87,34 +147,44 @@ export default function ImportPage() {
         return true
       })
 
+      // Compute grid positions for all imported members
+      const importPositions = computeImportPositions(toInsert.length, baseX, baseY, anchorDirection)
+
       setProgress({ current: 0, total: toInsert.length + families.length, label: 'Adding people…' })
 
-      // Batch insert in chunks of 50
       const CHUNK = 50
       for (let i = 0; i < toInsert.length; i += CHUNK) {
-        const chunk = toInsert.slice(i, i + CHUNK).map((p: any) => ({
-          user_id: userId,
-          name: p.name,
-          birth_year: p.birthYear,
-          birth_date: p.birthDate || null,
-          death_year: p.deathYear,
-          death_date: p.deathDate || null,
-          is_deceased: p.isDeceased || !!p.deathYear || !!p.deathDate,
-          birthplace: p.birthPlace || null,
-          deathplace: p.deathPlace || null,
-          notes: p.notes.join('\n\n') || null,
-          social_links: [],
-          position_x: Math.random() * 2000 - 1000,
-          position_y: Math.random() * 2000 - 1000,
-          is_root: false,
-        }))
+        const chunk = toInsert.slice(i, i + CHUNK).map((p: any, idx: number) => {
+          // Extract country from birthplace and deathplace
+          const birthCountry = extractCountry(p.birthPlace)
+          const deathCountry = extractCountry(p.deathPlace)
+          const origins = [...new Set([birthCountry, deathCountry].filter(Boolean))] as string[]
+
+          const pos = importPositions[i + idx] ?? { x: baseX + (i + idx) * 260, y: baseY }
+
+          return {
+            user_id: userId,
+            name: p.name,
+            birth_year: p.birthYear,
+            birth_date: p.birthDate || null,
+            death_year: p.deathYear,
+            death_date: p.deathDate || null,
+            is_deceased: p.isDeceased || !!p.deathYear || !!p.deathDate,
+            birthplace: p.birthPlace || null,
+            deathplace: p.deathPlace || null,
+            notes: p.notes.join('\n\n') || null,
+            origins: origins.length > 0 ? origins : null,
+            social_links: [],
+            position_x: pos.x,
+            position_y: pos.y,
+            is_root: false,
+          }
+        })
 
         const { data: inserted, error: insertError } = await supabase
           .from('members').insert(chunk).select('id, name, birth_year')
-
         if (insertError) throw insertError
 
-        // Map GEDCOM ids to new Supabase ids
         inserted?.forEach((ins: any, idx: number) => {
           idMap.set(toInsert[i + idx].id, ins.id)
         })
@@ -122,18 +192,14 @@ export default function ImportPage() {
         setProgress(p => ({ ...p, current: Math.min(i + CHUNK, toInsert.length), label: 'Adding people…' }))
       }
 
-      // Insert relationships from families
+      // Insert relationships
       setProgress(p => ({ ...p, label: 'Adding relationships…' }))
       const relationships: any[] = []
 
       for (const fam of families) {
         const husbId = fam.husbandId ? idMap.get(fam.husbandId) : null
         const wifeId = fam.wifeId ? idMap.get(fam.wifeId) : null
-
-        if (husbId && wifeId) {
-          relationships.push({ user_id: userId, source_id: husbId, target_id: wifeId, relation_type: 'spouse' })
-        }
-
+        if (husbId && wifeId) relationships.push({ user_id: userId, source_id: husbId, target_id: wifeId, relation_type: 'spouse' })
         for (const childGedId of fam.childIds) {
           const childId = idMap.get(childGedId)
           if (!childId) continue
@@ -142,7 +208,6 @@ export default function ImportPage() {
         }
       }
 
-      // Batch insert relationships, skip duplicates
       for (let i = 0; i < relationships.length; i += CHUNK) {
         const chunk = relationships.slice(i, i + CHUNK)
         await supabase.from('relationships').upsert(chunk, { onConflict: 'source_id,target_id,relation_type', ignoreDuplicates: true })
@@ -157,45 +222,134 @@ export default function ImportPage() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    background: 'rgba(28,22,16,0.95)', border: '1px solid #3a3020',
-    borderRadius: 14, padding: 32, maxWidth: 560, margin: '0 auto',
-    fontFamily: 'Lora, serif', color: '#f5edd8',
+  const s = {
+    page: { minHeight: '100vh', background: '#0f0c08', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px' } as React.CSSProperties,
+    card: { background: 'rgba(28,22,16,0.95)', border: '1px solid #3a3020', borderRadius: 14, padding: 32, width: '100%', maxWidth: 580, fontFamily: 'Lora, serif', color: '#f5edd8' } as React.CSSProperties,
+    label: { fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase' as const, letterSpacing: '0.1em', display: 'block', marginBottom: 6 },
+    input: { width: '100%', background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '8px 12px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13, boxSizing: 'border-box' as const },
+    section: { marginBottom: 20 } as React.CSSProperties,
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0c08', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={inputStyle}>
+    <div style={s.page}>
+      <div style={s.card}>
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#c49040', margin: 0 }}>Import GEDCOM</h1>
-            <p style={{ fontSize: 13, color: '#b8a882', margin: '4px 0 0', fontStyle: 'italic' }}>From FamilySearch, Ancestry, or any genealogy software</p>
+            <p style={{ fontSize: 13, color: '#b8a882', margin: '4px 0 0', fontStyle: 'italic' }}>From FamilySearch via RootsMagic</p>
           </div>
-          <button onClick={() => router.push('/tree')} style={{ background: 'none', border: '1px solid #3a3020', borderRadius: 8, color: '#b8a882', padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>← Back to Tree</button>
+          <button onClick={() => router.push('/tree')} style={{ background: 'none', border: '1px solid #3a3020', borderRadius: 8, color: '#b8a882', padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>← Back</button>
         </div>
 
-        {/* Instructions */}
-        <div style={{ background: 'rgba(196,144,64,0.08)', border: '1px solid rgba(196,144,64,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#b8a882', lineHeight: 1.6 }}>
-          <strong style={{ color: '#c49040' }}>How to export from FamilySearch:</strong><br />
-          1. Go to your tree on FamilySearch<br />
-          2. Click a person → <em>Tree Settings</em> → <em>Export</em><br />
-          3. Choose <em>Download GEDCOM</em><br />
-          4. Upload the <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 4 }}>.ged</code> file below
-        </div>
+        {(status === 'idle' || status === 'previewing') && (
+          <>
+            {/* Anchor picker */}
+            <div style={{ background: 'rgba(196,144,64,0.06)', border: '1px solid rgba(196,144,64,0.2)', borderRadius: 12, padding: '16px 18px', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 14, color: '#c49040', marginBottom: 12 }}>📍 Placement Anchor</div>
+              <p style={{ fontSize: 12, color: '#b8a882', margin: '0 0 14px', lineHeight: 1.6 }}>
+                Pick the person in your existing tree who connects to the imported people. Imported members will be placed in a clean grid <strong style={{ color: '#f5edd8' }}>away from your existing tree</strong> — they won't overlap anything you've already done.
+              </p>
 
-        {/* Upload area */}
-        {status === 'idle' && (
-          <div
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
-            style={{ border: '2px dashed #3a3020', borderRadius: 12, padding: '40px 24px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.2s' }}
-          >
-            <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
-            <div style={{ fontSize: 14, color: '#f5edd8', marginBottom: 4 }}>Drop your .ged file here</div>
-            <div style={{ fontSize: 12, color: '#b8a882' }}>or click to browse</div>
-            <input ref={fileRef} type="file" accept=".ged,.gedcom" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </div>
+              <div style={s.section}>
+                <label style={s.label}>Bridge person (oldest person you already have)</label>
+                <input
+                  value={memberSearch}
+                  onChange={e => setMemberSearch(e.target.value)}
+                  placeholder="Search your existing members…"
+                  style={s.input}
+                />
+                {memberSearch && filteredMembers.length > 0 && (
+                  <div style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, marginTop: 4, overflow: 'hidden' }}>
+                    {filteredMembers.map(m => (
+                      <button key={m.id} onClick={() => { setAnchorMemberId(m.id); setMemberSearch(m.name) }}
+                        style={{ display: 'block', width: '100%', padding: '8px 12px', background: anchorMemberId === m.id ? 'rgba(196,144,64,0.1)' : 'none', border: 'none', borderBottom: '1px solid #1a1208', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
+                        {m.name} {m.birth_year ? `(b. ${m.birth_year})` : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedAnchor && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#c49040' }}>
+                    ✓ {selectedAnchor.name} selected — imports will be placed relative to their position
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={s.label}>Direction from bridge person</label>
+                  <select value={anchorDirection} onChange={e => setAnchorDirection(e.target.value as any)}
+                    style={{ ...s.input }}>
+                    <option value="above">Above (ancestors)</option>
+                    <option value="below">Below (descendants)</option>
+                    <option value="left">To the left</option>
+                    <option value="right">To the right</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={s.label}>Extra spacing (pixels)</label>
+                  <input type="number" value={Math.abs(anchorOffsetY)} onChange={e => {
+                    const v = parseInt(e.target.value) || 2000
+                    setAnchorOffsetY(anchorDirection === 'above' ? -v : v)
+                  }} style={s.input} step={200} min={500} />
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, color: '#6a6050', fontStyle: 'italic', lineHeight: 1.5 }}>
+                💡 The default 2000px gap ensures imported people appear well clear of your existing tree. Increase it if needed.
+              </div>
+            </div>
+
+            {/* Upload area */}
+            {status === 'idle' && (
+              <div
+                onClick={() => fileRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+                style={{ border: '2px dashed #3a3020', borderRadius: 12, padding: '36px 24px', textAlign: 'center', cursor: 'pointer' }}
+              >
+                <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
+                <div style={{ fontSize: 14, color: '#f5edd8', marginBottom: 4 }}>Drop your .ged file here</div>
+                <div style={{ fontSize: 12, color: '#b8a882' }}>or click to browse</div>
+                <input ref={fileRef} type="file" accept=".ged,.gedcom" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+              </div>
+            )}
+
+            {/* Preview */}
+            {status === 'previewing' && preview && (
+              <div>
+                <div style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 10, padding: '16px 20px', marginBottom: 16 }}>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Import Preview</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                    {[
+                      { label: 'People found', value: preview.persons, color: '#c49040' },
+                      { label: 'Families', value: preview.families, color: '#507090' },
+                      { label: 'Will skip', value: preview.skipped, color: '#b8a882' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, fontFamily: 'Playfair Display, serif', color }}>{value}</div>
+                        <div style={{ fontSize: 11, color: '#b8a882' }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#b8a882', fontStyle: 'italic', borderTop: '1px solid #2a2010', paddingTop: 10 }}>
+                    {preview.persons - preview.skipped} new people will be added, placed {anchorDirection} of {selectedAnchor?.name ?? 'the canvas center'} with a {Math.abs(anchorOffsetY)}px gap. Countries will be extracted from birthplaces and added as origins.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => { setStatus('idle'); setGedcomData(null); setPreview(null) }}
+                    style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid #3a3020', background: 'none', color: '#b8a882', cursor: 'pointer', fontSize: 13 }}>
+                    Cancel
+                  </button>
+                  <button onClick={runImport}
+                    style={{ flex: 2, padding: 10, borderRadius: 8, border: 'none', background: '#c49040', color: '#1a1208', cursor: 'pointer', fontSize: 14, fontFamily: 'Playfair Display, serif', fontWeight: 600 }}>
+                    Import {preview.persons - preview.skipped} People →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {status === 'parsing' && (
@@ -205,48 +359,16 @@ export default function ImportPage() {
           </div>
         )}
 
-        {status === 'previewing' && preview && (
-          <div>
-            <div style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>Import Preview</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                {[
-                  { label: 'People found', value: preview.persons, color: '#c49040' },
-                  { label: 'Families', value: preview.families, color: '#507090' },
-                  { label: 'Will skip', value: preview.skipped, color: '#b8a882' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 28, fontFamily: 'Playfair Display, serif', color }}>{value}</div>
-                    <div style={{ fontSize: 11, color: '#b8a882' }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 12, fontSize: 12, color: '#b8a882', fontStyle: 'italic' }}>
-                {preview.persons - preview.skipped} new people will be added. {preview.skipped} already exist and will be skipped.
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setStatus('idle'); setGedcomData(null); setPreview(null) }}
-                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #3a3020', background: 'none', color: '#b8a882', cursor: 'pointer', fontSize: 13 }}>
-                Cancel
-              </button>
-              <button onClick={runImport}
-                style={{ flex: 2, padding: '10px', borderRadius: 8, border: 'none', background: '#c49040', color: '#1a1208', cursor: 'pointer', fontSize: 14, fontFamily: 'Playfair Display, serif', fontWeight: 600 }}>
-                Import {preview.persons - preview.skipped} People →
-              </button>
-            </div>
-          </div>
-        )}
-
         {status === 'importing' && (
           <div style={{ padding: '20px 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
               <span style={{ color: '#b8a882' }}>{progress.label}</span>
               <span style={{ color: '#c49040' }}>{progress.current} / {progress.total}</span>
             </div>
-            <div style={{ height: 6, background: '#1a1208', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', background: '#c49040', borderRadius: 3, width: progress.total ? `${(progress.current / progress.total) * 100}%` : '0%', transition: 'width 0.3s' }} />
+            <div style={{ height: 8, background: '#1a1208', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: 'linear-gradient(90deg, #c49040, #e0b060)', borderRadius: 4, width: progress.total ? `${(progress.current / progress.total) * 100}%` : '0%', transition: 'width 0.3s' }} />
             </div>
+            <div style={{ fontSize: 11, color: '#6a6050', marginTop: 8, fontStyle: 'italic' }}>This may take a few minutes for large trees…</div>
           </div>
         )}
 
@@ -254,8 +376,11 @@ export default function ImportPage() {
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🌿</div>
             <div style={{ fontSize: 16, color: '#c49040', fontFamily: 'Playfair Display, serif', marginBottom: 8 }}>{progress.label}</div>
+            <p style={{ fontSize: 13, color: '#b8a882', fontStyle: 'italic', margin: '0 0 20px' }}>
+              Origins have been extracted from birthplaces. Head to the tree to connect the imported people to your existing members.
+            </p>
             <button onClick={() => router.push('/tree')}
-              style={{ marginTop: 16, padding: '10px 24px', borderRadius: 8, border: 'none', background: '#c49040', color: '#1a1208', cursor: 'pointer', fontSize: 14, fontFamily: 'Playfair Display, serif', fontWeight: 600 }}>
+              style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#c49040', color: '#1a1208', cursor: 'pointer', fontSize: 14, fontFamily: 'Playfair Display, serif', fontWeight: 600 }}>
               Go to Tree →
             </button>
           </div>
@@ -268,7 +393,6 @@ export default function ImportPage() {
           </div>
         )}
       </div>
-
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
