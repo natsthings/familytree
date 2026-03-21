@@ -9,6 +9,8 @@ export interface Member {
   origins: string[] | null
   death_date: string | null
   notes: string | null
+  birthplace: string | null
+  deathplace: string | null
   photo_url: string | null
   is_root: boolean
   position_x: number
