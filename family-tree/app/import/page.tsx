@@ -158,7 +158,7 @@ export default function ImportPage() {
           // Extract country from birthplace and deathplace
           const birthCountry = extractCountry(p.birthPlace)
           const deathCountry = extractCountry(p.deathPlace)
-          const origins = [...new Set([birthCountry, deathCountry].filter(Boolean))] as string[]
+          const origins = Array.from(new Set([birthCountry, deathCountry].filter(Boolean))) as string[]
 
           const pos = importPositions[i + idx] ?? { x: baseX + (i + idx) * 260, y: baseY }
 
