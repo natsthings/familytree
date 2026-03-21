@@ -9,6 +9,7 @@ import ReactFlow, {
   applyNodeChanges, applyEdgeChanges,
   BackgroundVariant, MarkerType,
   EdgeMouseHandler,
+  ReactFlowInstance,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
@@ -73,6 +74,10 @@ export default function TreePage() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [showRequestsPanel, setShowRequestsPanel] = useState(false)
   const [deleteRequests, setDeleteRequests] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Member[]>([])
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const flowInstance = useRef<ReactFlowInstance | null>(null)
 
   const [modal, setModal] = useState<{
     mode: 'add' | 'edit' | 'connect'
@@ -455,6 +460,22 @@ export default function TreePage() {
     setDeleteRequests(data ?? [])
   }
 
+  const handleSearch = (q: string) => {
+    setSearchQuery(q)
+    if (!q.trim()) { setSearchResults([]); setShowSearchResults(false); return }
+    const results = members.filter(m => m.name.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
+    setSearchResults(results)
+    setShowSearchResults(true)
+  }
+
+  const panToMember = (member: Member) => {
+    const node = nodes.find(n => n.id === member.id)
+    if (!node || !flowInstance.current) return
+    flowInstance.current.setCenter(node.position.x + 110, node.position.y + 75, { zoom: 1, duration: 600 })
+    setSearchQuery('')
+    setShowSearchResults(false)
+  }
+
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -558,6 +579,33 @@ export default function TreePage() {
               {privateMode ? '🔒 Private' : '🌐 Public'}
             </button>
           )}
+          {/* Search */}
+          <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid #3a3020', borderRadius: 8, padding: '6px 10px' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b8a882" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input
+                value={searchQuery}
+                onChange={e => handleSearch(e.target.value)}
+                onFocus={() => searchQuery && setShowSearchResults(true)}
+                onBlur={() => setTimeout(() => setShowSearchResults(false), 150)}
+                placeholder="Search members…"
+                style={{ background: 'none', border: 'none', outline: 'none', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 12, width: 150 }}
+              />
+            </div>
+            {showSearchResults && searchResults.length > 0 && (
+              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 100, background: '#1c1610', border: '1px solid #3a3020', borderRadius: 10, overflow: 'hidden', minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                {searchResults.map(m => (
+                  <button key={m.id} onMouseDown={() => panToMember(m)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: '1px solid #2a2010', textAlign: 'left' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#3a3020,#252015)', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#b8a882' }}>
+                      {m.photo_url ? <img src={m.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : m.name[0]}
+                    </div>
+                    <span style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#f5edd8' }}>{m.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button onClick={() => setModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8, padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> Add member
           </button>
@@ -588,6 +636,7 @@ export default function TreePage() {
         onEdgeMouseMove={onEdgeMouseMove}
         onEdgeMouseLeave={onEdgeMouseLeave}
         nodeTypes={nodeTypes}
+        onInit={(instance) => { flowInstance.current = instance }}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
