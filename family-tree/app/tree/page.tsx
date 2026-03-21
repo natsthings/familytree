@@ -78,6 +78,18 @@ export default function TreePage() {
   const [searchResults, setSearchResults] = useState<Member[]>([])
   const [showSearchResults, setShowSearchResults] = useState(false)
   const flowInstance = useRef<ReactFlowInstance | null>(null)
+  const undoStack = useRef<Array<{
+    type: 'delete_edge'
+    rel: any
+  } | {
+    type: 'delete_member'
+    member: any
+    rels: any[]
+  } | {
+    type: 'add_member'
+    memberId: string
+    relIds: string[]
+  }>>([])
 
   const [modal, setModal] = useState<{
     mode: 'add' | 'edit' | 'connect'
@@ -424,6 +436,11 @@ export default function TreePage() {
         Promise.all(privateIds.map(id => supabase.from('private_relationships').delete().eq('id', id)))
       }
       if (publicIds.length > 0) {
+        // Push to undo stack before deleting
+        publicIds.forEach(id => {
+          const rel = relationships.find(r => r.id === id)
+          if (rel) undoStack.current.push({ type: 'delete_edge', rel })
+        })
         setRelationships(prev => prev.filter(r => !publicIds.includes(r.id)))
         Promise.all(publicIds.map(id =>
           supabase.from('relationships').delete().eq('id', id).then(() => {
@@ -460,6 +477,56 @@ export default function TreePage() {
     setDeleteRequests(data ?? [])
   }
 
+  const handleUndo = useCallback(async () => {
+    const action = undoStack.current.pop()
+    if (!action) return
+    const supabase = createClient()
+
+    if (action.type === 'delete_edge') {
+      const { rel } = action
+      const { data: inserted } = await supabase.from('relationships').insert({
+        user_id: rel.user_id, source_id: rel.source_id, target_id: rel.target_id,
+        relation_type: rel.relation_type, label: rel.label ?? null,
+      }).select().single()
+      if (inserted) setRelationships(prev => [...prev, inserted])
+    }
+
+    if (action.type === 'delete_member') {
+      const { member, rels } = action
+      const { data: inserted } = await supabase.from('members').insert({
+        ...member, id: undefined, created_at: undefined, updated_at: undefined,
+      }).select().single()
+      if (inserted) {
+        setMembers(prev => [...prev, inserted])
+        // Restore relationships with new member id
+        if (rels.length > 0) {
+          const restoredRels = rels.map(r => ({
+            user_id: r.user_id,
+            source_id: r.source_id === member.id ? inserted.id : r.source_id,
+            target_id: r.target_id === member.id ? inserted.id : r.target_id,
+            relation_type: r.relation_type, label: r.label ?? null,
+          }))
+          const { data: insertedRels } = await supabase.from('relationships').insert(restoredRels).select()
+          if (insertedRels) setRelationships(prev => [...prev, ...insertedRels])
+        }
+      }
+    }
+  }, [members, relationships])
+
+  // Ctrl+Z listener
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        const tag = (e.target as HTMLElement)?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        e.preventDefault()
+        handleUndo()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleUndo])
+
   const handleSearch = (q: string) => {
     setSearchQuery(q)
     if (!q.trim()) { setSearchResults([]); setShowSearchResults(false); return }
@@ -486,6 +553,10 @@ export default function TreePage() {
     setModal(null)
     setPendingConnect(null)
     if (deletedMemberId) {
+      // Push to undo stack
+      const deletedMember = members.find(m => m.id === deletedMemberId)
+      const deletedRels = relationships.filter(r => r.source_id === deletedMemberId || r.target_id === deletedMemberId)
+      if (deletedMember) undoStack.current.push({ type: 'delete_member', member: deletedMember, rels: deletedRels })
       setMembers(prev => prev.filter(m => m.id !== deletedMemberId))
       setRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
       setPrivateRelationships(prev => prev.filter(r => r.source_id !== deletedMemberId && r.target_id !== deletedMemberId))
