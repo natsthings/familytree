@@ -102,12 +102,7 @@ export default function ImportPage() {
       const existingSet = new Set(
         (existing ?? []).map((m: any) => `${m.name?.toLowerCase()}|${m.birth_year ?? ''}`)
       )
-      let skipped = 0
-      for (const p of data.persons) {
-        const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
-        if (existingSet.has(key)) skipped++
-      }
-
+      const skipped = 0  // no longer skipping — all will be imported
       setPreview({ persons: data.persons.length, families: data.families.length, skipped })
       setStatus('previewing')
     } catch (e: any) {
@@ -227,7 +222,7 @@ export default function ImportPage() {
       }
 
       setStatus('done')
-      setProgress({ current: 0, total: 0, label: `Done! Added ${toInsert.length} people and ${relationships.length} relationships.` })
+      setProgress({ current: 0, total: 0, label: `Done! Added ${toInsert.length} people and ${relationships.length} relationships. Run the Duplicate Detector to clean up any overlaps.` })
     } catch (e: any) {
       setError(e.message || 'Import failed')
       setStatus('error')
