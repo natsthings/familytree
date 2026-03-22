@@ -139,7 +139,10 @@ export default function MemberModal({
           p_grave_location: graveLocation || null,
           p_source_links: JSON.parse(JSON.stringify(sourceLinks)),
         })
-        if (nameError) throw nameError
+        if (nameError) {
+          console.error('RPC error:', nameError)
+          throw new Error(nameError.message || 'Failed to save — try running the latest SQL migration in Supabase')
+        }
       } else if (mode === 'add') {
         const table = privateMode ? 'private_members' : 'members'
         const { error } = await supabase.from(table as any).insert({
@@ -502,6 +505,61 @@ export default function MemberModal({
             <div>
               <label style={labelStyle}>Custom label</label>
               <input type="text" value={customLabel} onChange={e => setCustomLabel(e.target.value)} style={inputStyle} placeholder="e.g. Godfather…" />
+            </div>
+          )}
+
+          {/* Sources & References */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <div>
+              <label style={labelStyle}>Sources & References</label>
+              {sourceLinks.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {sourceLinks.map((link, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {link.title && <div style={{ fontSize: 12, color: '#f5edd8', marginBottom: 2 }}>{link.title}</div>}
+                        <a href={link.url} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 11, color: '#8ab0d0', wordBreak: 'break-all', textDecoration: 'none', fontFamily: 'DM Mono, monospace' }}>
+                          {link.url.length > 50 ? link.url.slice(0, 50) + '…' : link.url}
+                        </a>
+                      </div>
+                      <button onClick={() => setSourceLinks(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', fontSize: 16, padding: '2px 6px', flexShrink: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: '#0f0c08', border: '1px dashed #3a3020', borderRadius: 8, padding: '10px 12px' }}>
+                <input
+                  value={sourceLinkInput.title}
+                  onChange={e => setSourceLinkInput(p => ({ ...p, title: e.target.value }))}
+                  placeholder="Title (optional — e.g. Census record 1920)"
+                  style={{ ...inputStyle, fontSize: 12 }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={sourceLinkInput.url}
+                    onChange={e => setSourceLinkInput(p => ({ ...p, url: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && sourceLinkInput.url.trim()) {
+                        setSourceLinks(prev => [...prev, { title: sourceLinkInput.title.trim(), url: sourceLinkInput.url.trim() }])
+                        setSourceLinkInput({ title: '', url: '' })
+                      }
+                    }}
+                    placeholder="Paste URL… (press Enter to add)"
+                    style={{ ...inputStyle, flex: 1, fontSize: 12 }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!sourceLinkInput.url.trim()) return
+                      setSourceLinks(prev => [...prev, { title: sourceLinkInput.title.trim(), url: sourceLinkInput.url.trim() }])
+                      setSourceLinkInput({ title: '', url: '' })
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #3a3020', background: 'rgba(196,144,64,0.1)', color: '#c49040', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13, flexShrink: 0 }}>
+                    Add
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
