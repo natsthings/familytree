@@ -56,9 +56,9 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           : isClaimed ? '1px solid #507040'
           : '1px solid #3a3020',
         borderRadius: '12px',
-        padding: isCompact ? '6px 10px' : '12px 16px',
-        minWidth: isCompact ? '120px' : '160px',
-        maxWidth: isCompact ? '160px' : '200px',
+        padding: isCompact ? '6px 10px' : isDetailed ? '14px 18px' : '12px 16px',
+        minWidth: isCompact ? '120px' : isDetailed ? '200px' : '160px',
+        maxWidth: isCompact ? '160px' : isDetailed ? '240px' : '200px',
         cursor: 'pointer',
         boxShadow: selected
           ? '0 0 20px rgba(196,144,64,0.3)'
@@ -147,19 +147,26 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           </div>
         )}
 
-        {/* Birthplace in detailed mode */}
-        {isDetailed && (member as any).birthplace && (
-          <div style={{ fontSize: 9, color: '#b8a882', marginTop: 3, fontStyle: 'italic' }}>
+        {/* Birthplace — always show if available, bigger in detailed */}
+        {(member as any).birthplace && (
+          <div style={{ fontSize: isDetailed ? 10 : 9, color: '#b8a882', marginTop: 3, fontStyle: 'italic' }}>
             📍 {(member as any).birthplace}
           </div>
         )}
 
-        {/* Origins in detailed mode */}
-        {isDetailed && member.origins && member.origins.length > 0 && (
+        {/* Origins */}
+        {member.origins && member.origins.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
-            {member.origins.slice(0, 3).map((o, i) => (
+            {member.origins.slice(0, isDetailed ? 6 : 2).map((o, i) => (
               <span key={i} style={{ fontSize: 8, background: 'rgba(80,112,90,0.2)', border: '1px solid rgba(80,112,90,0.3)', borderRadius: 10, padding: '1px 5px', color: '#80b090' }}>{o}</span>
             ))}
+          </div>
+        )}
+
+        {/* Biography snippet — detailed only */}
+        {isDetailed && (member as any).biography && (
+          <div style={{ fontSize: 9, color: '#b8a882', marginTop: 5, fontStyle: 'italic', lineHeight: 1.4, textAlign: 'left', borderTop: '1px solid #2a2010', paddingTop: 5, maxWidth: '100%', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any }}>
+            {(member as any).biography.slice(0, 120)}{(member as any).biography.length > 120 ? '…' : ''}
           </div>
         )}
 
