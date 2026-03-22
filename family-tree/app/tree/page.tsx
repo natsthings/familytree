@@ -632,7 +632,7 @@ export default function TreePage() {
       // Surgically refresh just members and relationships — don't reload positions
       const supabase = createClient()
       const [{ data: membersData }, { data: relsData }] = await Promise.all([
-        supabase.from('members').select('*'),
+        supabase.from('members').select('*').eq('is_imported', false),
         supabase.from('relationships').select('*').eq('is_imported', false),
       ])
       if (membersData) {
