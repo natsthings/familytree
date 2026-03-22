@@ -142,49 +142,56 @@ export default function ImportPage() {
         return true
       })
 
-      // Compute grid positions for all imported members
-      const importPositions = computeImportPositions(toInsert.length, baseX, baseY, anchorDirection)
-
-      setProgress({ current: 0, total: toInsert.length + families.length, label: 'Adding people…' })
-
       const CHUNK = 50
-      for (let i = 0; i < toInsert.length; i += CHUNK) {
-        const chunk = toInsert.slice(i, i + CHUNK).map((p: any, idx: number) => {
-          // Extract country from birthplace and deathplace
-          const birthCountry = extractCountry(p.birthPlace)
-          const deathCountry = extractCountry(p.deathPlace)
-          const origins = Array.from(new Set([birthCountry, deathCountry].filter(Boolean))) as string[]
 
-          const pos = importPositions[i + idx] ?? { x: baseX + (i + idx) * 260, y: baseY }
+      if (!relsOnlyMode) {
+        // Normal mode: insert people
+        const importPositions = computeImportPositions(toInsert.length, baseX, baseY, anchorDirection)
+        setProgress({ current: 0, total: toInsert.length, label: 'Adding people…' })
 
-          return {
-            user_id: userId,
-            name: p.name,
-            birth_year: p.birthYear,
-            birth_date: p.birthDate || null,
-            death_year: p.deathYear,
-            death_date: p.deathDate || null,
-            is_deceased: p.isDeceased || !!p.deathYear || !!p.deathDate,
-            birthplace: p.birthPlace || null,
-            deathplace: p.deathPlace || null,
-            notes: p.notes.join('\n\n') || null,
-            origins: origins.length > 0 ? origins : null,
-            social_links: [],
-            position_x: pos.x,
-            position_y: pos.y,
-            is_root: false,
-          }
+        for (let i = 0; i < toInsert.length; i += CHUNK) {
+          const chunk = toInsert.slice(i, i + CHUNK).map((p: any, idx: number) => {
+            const birthCountry = extractCountry(p.birthPlace)
+            const deathCountry = extractCountry(p.deathPlace)
+            const origins = Array.from(new Set([birthCountry, deathCountry].filter(Boolean))) as string[]
+            const pos = importPositions[i + idx] ?? { x: baseX + (i + idx) * 260, y: baseY }
+            return {
+              user_id: userId, name: p.name,
+              birth_year: p.birthYear, birth_date: p.birthDate || null,
+              death_year: p.deathYear, death_date: p.deathDate || null,
+              is_deceased: p.isDeceased || !!p.deathYear || !!p.deathDate,
+              birthplace: p.birthPlace || null, deathplace: p.deathPlace || null,
+              notes: p.notes.join('\n\n') || null,
+              origins: origins.length > 0 ? origins : null,
+              social_links: [], position_x: pos.x, position_y: pos.y, is_root: false,
+            }
+          })
+          const { data: inserted, error: insertError } = await supabase
+            .from('members').insert(chunk).select('id, name, birth_year')
+          if (insertError) throw insertError
+          inserted?.forEach((ins: any, idx: number) => { idMap.set(toInsert[i + idx].id, ins.id) })
+          setProgress(p => ({ ...p, current: Math.min(i + CHUNK, toInsert.length), label: 'Adding people…' }))
+        }
+      } else {
+        // Relationships-only mode: load all existing members to build ID map
+        setProgress({ current: 0, total: 0, label: 'Loading existing members to match…' })
+        let offset = 0
+        while (true) {
+          const { data: batch } = await supabase.from('members').select('id, name, birth_year').range(offset, offset + 999)
+          if (!batch || batch.length === 0) break
+          batch.forEach((m: any) => {
+            existingMap.set(`${m.name?.toLowerCase()}|${m.birth_year ?? ''}`, m.id)
+          })
+          if (batch.length < 1000) break
+          offset += 1000
+        }
+        // Map all GEDCOM IDs to Supabase IDs by name+year
+        persons.forEach((p: any) => {
+          const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
+          const id = existingMap.get(key)
+          if (id) idMap.set(p.id, id)
         })
-
-        const { data: inserted, error: insertError } = await supabase
-          .from('members').insert(chunk).select('id, name, birth_year')
-        if (insertError) throw insertError
-
-        inserted?.forEach((ins: any, idx: number) => {
-          idMap.set(toInsert[i + idx].id, ins.id)
-        })
-
-        setProgress(p => ({ ...p, current: Math.min(i + CHUNK, toInsert.length), label: 'Adding people…' }))
+        setProgress({ current: idMap.size, total: persons.length, label: `Matched ${idMap.size} of ${persons.length} people — building relationships…` })
       }
 
       // Insert relationships
@@ -321,6 +328,16 @@ export default function ImportPage() {
 
               <div style={{ fontSize: 11, color: '#6a6050', fontStyle: 'italic', lineHeight: 1.5 }}>
                 💡 The default 2000px gap ensures imported people appear well clear of your existing tree. Increase it if needed.
+              </div>
+            </div>
+
+            {/* Relationships-only mode toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: relsOnlyMode ? 'rgba(80,112,144,0.15)' : '#0f0c08', border: `1px solid ${relsOnlyMode ? '#507090' : '#3a3020'}`, borderRadius: 10, marginBottom: 16, cursor: 'pointer' }}
+              onClick={() => setRelsOnlyMode(p => !p)}>
+              <input type="checkbox" checked={relsOnlyMode} onChange={() => {}} style={{ accentColor: '#507090', width: 16, height: 16, cursor: 'pointer' }} />
+              <div>
+                <div style={{ fontSize: 13, color: relsOnlyMode ? '#8ab0d0' : '#f5edd8', fontFamily: 'Lora, serif' }}>Relationships only mode</div>
+                <div style={{ fontSize: 11, color: '#b8a882', marginTop: 2 }}>Use this if people are already imported — only adds the missing connection lines</div>
               </div>
             </div>
 
