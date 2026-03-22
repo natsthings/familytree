@@ -174,27 +174,31 @@ export default function ImportPage() {
           setProgress(p => ({ ...p, current: Math.min(i + CHUNK, toInsert.length), label: 'Adding people…' }))
         }
       } else {
-        // Relationships-only mode: load all existing members to build ID map
+        // Relationships-only mode: load ALL members (just id/name/birth_year) to build ID map
         setProgress({ current: 0, total: 0, label: 'Loading existing members to match…' })
-        let offset = 0
-        while (true) {
-          const { data: batch } = await supabase.from('members').select('id, name, birth_year').range(offset, offset + 999)
-          if (!batch || batch.length === 0) break
-          batch.forEach((m: any) => {
-            existingMap.set(`${m.name?.toLowerCase()}|${m.birth_year ?? ''}`, m.id)
-          })
-          if (batch.length < 1000) break
-          offset += 1000
-        }
-        // Map all GEDCOM IDs to Supabase IDs by name+year
+        const { data: allMembers, error: fetchErr } = await supabase
+          .from('members')
+          .select('id, name, birth_year')
+        
+        if (fetchErr) throw new Error('Failed to load members: ' + fetchErr.message)
+        
+        ;(allMembers ?? []).forEach((m: any) => {
+          // Index by multiple key formats to maximize matches
+          const nameLower = m.name?.toLowerCase() ?? ''
+          existingMap.set(`${nameLower}|${m.birth_year ?? ''}`, m.id)
+          existingMap.set(`${nameLower}|`, m.id) // fallback: name only
+        })
+        
+        // Map GEDCOM IDs to Supabase IDs
+        let matched = 0
         persons.forEach((p: any) => {
           const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
-          const id = existingMap.get(key)
-          if (id) idMap.set(p.id, id)
+          const keyNameOnly = `${p.name.toLowerCase()}|`
+          const id = existingMap.get(key) ?? existingMap.get(keyNameOnly)
+          if (id) { idMap.set(p.id, id); matched++ }
         })
-        console.log('ID map size:', idMap.size, 'of', persons.length)
-        console.log('Sample matches:', Array.from(idMap.entries()).slice(0, 5))
-        setProgress({ current: idMap.size, total: persons.length, label: `Matched ${idMap.size} of ${persons.length} people — building relationships…` })
+        
+        setProgress({ current: matched, total: persons.length, label: `Matched ${matched} of ${persons.length} people — building relationships…` })
       }
 
       // Insert relationships
