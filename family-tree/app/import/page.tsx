@@ -209,7 +209,20 @@ export default function ImportPage() {
           }
           if (id) { idMap.set(p.id, id); matched++ }
         })
-        // Skip individual familysearch_id updates to avoid timeout
+        // Bulk update familysearch_id for matched members in chunks
+        const fsftUpdateList: { supabaseId: string; fsftId: string }[] = []
+        persons.forEach((p: any) => {
+          const supabaseId = idMap.get(p.id)
+          if (supabaseId && p.fsftId) fsftUpdateList.push({ supabaseId, fsftId: p.fsftId })
+        })
+        // Update in chunks of 50 using Promise.all for speed
+        for (let i = 0; i < fsftUpdateList.length; i += 50) {
+          const chunk = fsftUpdateList.slice(i, i + 50)
+          await Promise.all(chunk.map(u =>
+            supabase.from('members').update({ familysearch_id: u.fsftId }).eq('id', u.supabaseId)
+          ))
+          setProgress({ current: i, total: fsftUpdateList.length, label: `Updating FamilySearch IDs… ${i} of ${fsftUpdateList.length}` })
+        }
         
         setProgress({ current: matched, total: persons.length, label: `Matched ${matched} of ${persons.length} people — building relationships…` })
       }
