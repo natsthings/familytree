@@ -71,6 +71,7 @@ export default function ImportPage() {
   const [anchorOffsetY, setAnchorOffsetY] = useState<number>(-2000)
   const [anchorDirection, setAnchorDirection] = useState<'above' | 'below' | 'left' | 'right'>('above')
   const [memberSearch, setMemberSearch] = useState('')
+  const [relsOnlyMode, setRelsOnlyMode] = useState(false)
 
   useEffect(() => {
     createClient().auth.getUser().then(({ data }) => {
