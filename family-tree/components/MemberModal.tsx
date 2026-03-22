@@ -606,17 +606,12 @@ export default function MemberModal({
                   />
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input
+                  <textarea
                     value={eventInput.blurb}
                     onChange={e => setEventInput(p => ({ ...p, blurb: e.target.value }))}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && eventInput.blurb.trim()) {
-                        setPersonalEvents(prev => [...prev, { ...eventInput }])
-                        setEventInput({ year: '', date: '', blurb: '' })
-                      }
-                    }}
-                    placeholder="What happened… (press Enter)"
-                    style={{ ...inputStyle, flex: 1, fontSize: 12 }}
+                    placeholder="What happened…"
+                    rows={3}
+                    style={{ ...inputStyle, flex: 1, fontSize: 13, resize: 'vertical', lineHeight: 1.6, fontFamily: 'Lora, serif' }}
                   />
                   <button
                     onClick={() => {
