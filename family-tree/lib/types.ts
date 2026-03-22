@@ -5,18 +5,15 @@ export interface Member {
   birth_year: number | null
   birth_date: string | null
   death_year: number | null
-  is_deceased: boolean | null
-  origins: string[] | null
   death_date: string | null
+  is_deceased: boolean | null
   notes: string | null
   biography: string | null
   birthplace: string | null
   deathplace: string | null
   familysearch_id: string | null
   grave_location: string | null
-  birthplace: string | null
-  deathplace: string | null
-  biography: string | null
+  origins: string[] | null
   photo_url: string | null
   is_root: boolean
   position_x: number
