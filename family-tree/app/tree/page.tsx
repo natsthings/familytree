@@ -80,6 +80,14 @@ export default function TreePage() {
   const flowInstance = useRef<ReactFlowInstance | null>(null)
   const [cardSize, setCardSize] = useState<'compact' | 'normal' | 'detailed'>('normal')
   const [showShortcuts, setShowShortcuts] = useState(false)
+
+  // When cardSize changes, update all existing nodes' data immediately
+  useEffect(() => {
+    setNodes(prev => prev.map(n => {
+      if (n.type !== 'memberNode') return n
+      return { ...n, data: { ...n.data, cardSize } }
+    }))
+  }, [cardSize])
   const undoStack = useRef<Array<{
     type: 'delete_edge'
     rel: any
