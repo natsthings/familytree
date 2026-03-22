@@ -49,6 +49,11 @@ export default function MemberModal({
   const [isDeceased, setIsDeceased] = useState(!!member?.is_deceased || !!member?.death_date || !!member?.death_year)
   const [origins, setOrigins] = useState<string[]>(member?.origins ?? [])
   const [originInput, setOriginInput] = useState('')
+  const [biography, setBiography] = useState(member?.biography ?? '')
+  const [birthplace, setBirthplace] = useState((member as any)?.birthplace ?? '')
+  const [deathplace, setDeathplace] = useState((member as any)?.deathplace ?? '')
+  const [familySearchId, setFamilySearchId] = useState((member as any)?.familysearch_id ?? '')
+  const [graveLocation, setGraveLocation] = useState((member as any)?.grave_location ?? '')
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -125,6 +130,11 @@ export default function MemberModal({
           p_social_links: JSON.parse(JSON.stringify(socialLinks.filter((l: any) => l.url?.trim()))),
           p_is_deceased: isDeceased,
           p_origins: origins,
+          p_biography: biography || null,
+          p_birthplace: birthplace || null,
+          p_deathplace: deathplace || null,
+          p_familysearch_id: familySearchId || null,
+          p_grave_location: graveLocation || null,
         })
         if (nameError) throw nameError
       } else if (mode === 'add') {
@@ -137,6 +147,11 @@ export default function MemberModal({
           death_year: deathYear ? parseInt(deathYear) : (deathDate ? parseInt(deathDate.split('-')[0]) : null),
           is_deceased: isDeceased,
           origins: origins,
+          biography: biography || null,
+          birthplace: birthplace || null,
+          deathplace: deathplace || null,
+          familysearch_id: familySearchId || null,
+          grave_location: graveLocation || null,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
           position_x: (() => { const v = document.querySelector('.react-flow__viewport') as HTMLElement; if (!v) return 0; const m = new DOMMatrix(getComputedStyle(v).transform); const c = v.closest('.react-flow') as HTMLElement; return (((c?.offsetWidth??800)/2) - m.e) / (m.a||1) })() + (Math.random() * 60 - 30),
@@ -355,6 +370,22 @@ export default function MemberModal({
             </div>
           )}
 
+          {/* Birth & Death locations */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={labelStyle}>Birthplace</label>
+                <input value={birthplace} onChange={e => setBirthplace(e.target.value)}
+                  style={inputStyle} placeholder="e.g. Panama City, Panama" />
+              </div>
+              <div>
+                <label style={labelStyle}>Place of Death</label>
+                <input value={deathplace} onChange={e => setDeathplace(e.target.value)}
+                  style={inputStyle} placeholder="e.g. Capri, Italy" />
+              </div>
+            </div>
+          )}
+
           {/* Deceased toggle */}
           {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
             <button
@@ -372,6 +403,38 @@ export default function MemberModal({
               <span style={{ fontSize: 15 }}>{isDeceased ? '🕯️' : '○'}</span>
               {isDeceased ? 'Deceased' : 'Mark as deceased'}
             </button>
+          )}
+
+          {/* Biography */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <div>
+              <label style={labelStyle}>Biography</label>
+              <textarea
+                value={biography}
+                onChange={e => setBiography(e.target.value)}
+                placeholder="Life history, notable events, titles, historical context…"
+                rows={5}
+                style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6, fontFamily: 'Lora, serif', fontSize: 13 }}
+              />
+            </div>
+          )}
+
+          {/* FamilySearch ID */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <div>
+              <label style={labelStyle}>FamilySearch ID</label>
+              <input value={familySearchId} onChange={e => setFamilySearchId(e.target.value)}
+                style={inputStyle} placeholder="e.g. LRRV-5QY" />
+            </div>
+          )}
+
+          {/* Grave location — deceased only */}
+          {(mode === 'add' || mode === 'edit') && isDeceased && (
+            <div>
+              <label style={labelStyle}>Grave / Burial Location</label>
+              <input value={graveLocation} onChange={e => setGraveLocation(e.target.value)}
+                style={inputStyle} placeholder="e.g. Panama City Municipal Cemetery, Plot 42" />
+            </div>
           )}
 
           {/* Origins / heritage */}
