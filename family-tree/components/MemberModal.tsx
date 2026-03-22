@@ -56,6 +56,8 @@ export default function MemberModal({
   const [graveLocation, setGraveLocation] = useState((member as any)?.grave_location ?? '')
   const [sourceLinks, setSourceLinks] = useState<{ title: string; url: string }[]>((member as any)?.source_links ?? [])
   const [sourceLinkInput, setSourceLinkInput] = useState({ title: '', url: '' })
+  const [personalEvents, setPersonalEvents] = useState<{ year: string; date: string; blurb: string }[]>((member as any)?.personal_events ?? [])
+  const [eventInput, setEventInput] = useState({ year: '', date: '', blurb: '' })
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -138,6 +140,7 @@ export default function MemberModal({
           p_familysearch_id: familySearchId || null,
           p_grave_location: graveLocation || null,
           p_source_links: JSON.parse(JSON.stringify(sourceLinks)),
+          p_personal_events: JSON.parse(JSON.stringify(personalEvents)),
         })
         if (nameError) {
           console.error('RPC error:', nameError)
@@ -159,6 +162,7 @@ export default function MemberModal({
           familysearch_id: familySearchId || null,
           grave_location: graveLocation || null,
           source_links: sourceLinks,
+          personal_events: personalEvents,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
           position_x: (() => { const v = document.querySelector('.react-flow__viewport') as HTMLElement; if (!v) return 0; const m = new DOMMatrix(getComputedStyle(v).transform); const c = v.closest('.react-flow') as HTMLElement; return (((c?.offsetWidth??800)/2) - m.e) / (m.a||1) })() + (Math.random() * 60 - 30),
@@ -554,6 +558,71 @@ export default function MemberModal({
                       if (!sourceLinkInput.url.trim()) return
                       setSourceLinks(prev => [...prev, { title: sourceLinkInput.title.trim(), url: sourceLinkInput.url.trim() }])
                       setSourceLinkInput({ title: '', url: '' })
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #3a3020', background: 'rgba(196,144,64,0.1)', color: '#c49040', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13, flexShrink: 0 }}>
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Personal Events */}
+          {(mode === 'add' || mode === 'edit' || (mode === 'connect' && connectTo === 'new' && !isDragConnect)) && (
+            <div>
+              <label style={labelStyle}>Personal Events</label>
+              {personalEvents.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {personalEvents.map((ev, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '8px 10px' }}>
+                      <div style={{ flex: 1 }}>
+                        {(ev.year || ev.date) && (
+                          <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#c49040', marginBottom: 3 }}>
+                            {ev.date || ev.year}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 13, color: '#f5edd8', lineHeight: 1.5, fontFamily: 'Lora, serif' }}>{ev.blurb}</div>
+                      </div>
+                      <button onClick={() => setPersonalEvents(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', color: '#b8a882', cursor: 'pointer', fontSize: 16, padding: '2px 4px', flexShrink: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ background: '#0f0c08', border: '1px dashed #3a3020', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input
+                    value={eventInput.year}
+                    onChange={e => setEventInput(p => ({ ...p, year: e.target.value }))}
+                    placeholder="Year (optional)"
+                    type="number"
+                    style={{ ...inputStyle, fontSize: 12 }}
+                  />
+                  <input
+                    value={eventInput.date}
+                    onChange={e => setEventInput(p => ({ ...p, date: e.target.value }))}
+                    placeholder="Full date (optional)"
+                    style={{ ...inputStyle, fontSize: 12 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={eventInput.blurb}
+                    onChange={e => setEventInput(p => ({ ...p, blurb: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && eventInput.blurb.trim()) {
+                        setPersonalEvents(prev => [...prev, { ...eventInput }])
+                        setEventInput({ year: '', date: '', blurb: '' })
+                      }
+                    }}
+                    placeholder="What happened… (press Enter)"
+                    style={{ ...inputStyle, flex: 1, fontSize: 12 }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!eventInput.blurb.trim()) return
+                      setPersonalEvents(prev => [...prev, { ...eventInput }])
+                      setEventInput({ year: '', date: '', blurb: '' })
                     }}
                     style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #3a3020', background: 'rgba(196,144,64,0.1)', color: '#c49040', cursor: 'pointer', fontFamily: 'Lora, serif', fontSize: 13, flexShrink: 0 }}>
                     Add
