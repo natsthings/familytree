@@ -297,15 +297,15 @@ export default function ImportPage() {
           <button onClick={() => router.push('/tree')} style={{ background: 'none', border: '1px solid #3a3020', borderRadius: 8, color: '#b8a882', padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>← Back</button>
         </div>
 
-        {/* FamilySearch API option */}
-        <div onClick={() => router.push('/import/familysearch')}
+        {/* FamilySearch API option — hide during import */}
+        {status === 'idle' && <div onClick={() => router.push('/import/familysearch')}
           style={{ background: 'rgba(80,112,144,0.1)', border: '1px solid rgba(80,112,144,0.3)', borderRadius: 12, padding: '16px 18px', marginBottom: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: '#8ab0d0', marginBottom: 4 }}>🔗 Import directly from FamilySearch</div>
             <div style={{ fontSize: 12, color: '#b8a882', lineHeight: 1.5 }}>Connects via API — pulls everything including events, notes, biographies. No file needed. Recommended.</div>
           </div>
           <span style={{ color: '#8ab0d0', fontSize: 20, marginLeft: 12 }}>→</span>
-        </div>
+        </div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <div style={{ flex: 1, height: 1, background: '#3a3020' }} />
