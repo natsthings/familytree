@@ -608,19 +608,38 @@ export default function TreePage() {
   const loadImportedMembers = async () => {
     if (!userId) return
     const supabase = createClient()
-    const [{ data: importedMembers }, { data: importedRels }] = await Promise.all([
-      supabase.from('members').select('*').eq('is_imported', true).order('name'),
-      supabase.from('relationships').select('*').eq('is_imported', true),
-    ])
-    if (importedMembers) setMembers(prev => {
+
+    // Load imported members in pages
+    const allImportedMembers: any[] = []
+    let mOffset = 0
+    while (true) {
+      const { data: batch } = await supabase.from('members').select('*')
+        .eq('is_imported', true).range(mOffset, mOffset + 999)
+      if (!batch || batch.length === 0) break
+      allImportedMembers.push(...batch)
+      if (batch.length < 1000) break
+      mOffset += 1000
+    }
+
+    // Load imported relationships in pages
+    const allImportedRels: any[] = []
+    let rOffset = 0
+    while (true) {
+      const { data: batch } = await supabase.from('relationships').select('*')
+        .eq('is_imported', true).range(rOffset, rOffset + 999)
+      if (!batch || batch.length === 0) break
+      allImportedRels.push(...batch)
+      if (batch.length < 1000) break
+      rOffset += 1000
+    }
+
+    setMembers(prev => {
       const existingIds = new Set(prev.map(m => m.id))
-      const newOnes = importedMembers.filter((m: any) => !existingIds.has(m.id))
-      return [...prev, ...newOnes]
+      return [...prev, ...allImportedMembers.filter(m => !existingIds.has(m.id))]
     })
-    if (importedRels) setRelationships(prev => {
+    setRelationships(prev => {
       const existingIds = new Set(prev.map(r => r.id))
-      const newOnes = importedRels.filter((r: any) => !existingIds.has(r.id))
-      return [...prev, ...newOnes]
+      return [...prev, ...allImportedRels.filter(r => !existingIds.has(r.id))]
     })
   }
 
