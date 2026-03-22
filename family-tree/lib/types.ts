@@ -15,6 +15,7 @@ export interface Member {
   grave_location: string | null
   source_links: { title: string; url: string }[] | null
   personal_events: { year: string; date: string; blurb: string }[] | null
+  is_imported: boolean | null
   origins: string[] | null
   photo_url: string | null
   is_root: boolean
