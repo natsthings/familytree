@@ -608,10 +608,18 @@ export default function TreePage() {
   const loadImportedMembers = async () => {
     if (!userId) return
     const supabase = createClient()
-    const { data } = await supabase.from('members').select('*').eq('is_imported', true).order('name')
-    if (data) setMembers(prev => {
+    const [{ data: importedMembers }, { data: importedRels }] = await Promise.all([
+      supabase.from('members').select('*').eq('is_imported', true).order('name'),
+      supabase.from('relationships').select('*').eq('is_imported', true),
+    ])
+    if (importedMembers) setMembers(prev => {
       const existingIds = new Set(prev.map(m => m.id))
-      const newOnes = data.filter((m: any) => !existingIds.has(m.id))
+      const newOnes = importedMembers.filter((m: any) => !existingIds.has(m.id))
+      return [...prev, ...newOnes]
+    })
+    if (importedRels) setRelationships(prev => {
+      const existingIds = new Set(prev.map(r => r.id))
+      const newOnes = importedRels.filter((r: any) => !existingIds.has(r.id))
       return [...prev, ...newOnes]
     })
   }
@@ -749,7 +757,11 @@ export default function TreePage() {
           </button>
           <button onClick={async () => {
             if (!showImported) { await loadImportedMembers(); setShowImported(true) }
-            else { setMembers(prev => prev.filter(m => !(m as any).is_imported)); setShowImported(false) }
+            else { 
+              setMembers(prev => prev.filter(m => !(m as any).is_imported))
+              setRelationships(prev => prev.filter(r => !(r as any).is_imported))
+              setShowImported(false) 
+            }
           }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: showImported ? 'rgba(196,144,64,0.15)' : 'rgba(255,255,255,0.05)', color: showImported ? '#c49040' : '#b8a882', border: `1px solid ${showImported ? '#c49040' : '#3a3020'}`, borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             {showImported ? '🌳 Hide Imported' : '🌱 Show Imported'}
           </button>
