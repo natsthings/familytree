@@ -165,6 +165,7 @@ export default function ImportPage() {
               notes: p.notes.join('\n\n') || null,
               origins: origins.length > 0 ? origins : null,
               social_links: [], position_x: pos.x, position_y: pos.y, is_root: false,
+              familysearch_id: p.fsftId || null,
             }
           })
           const { data: inserted, error: insertError } = await supabase
@@ -182,21 +183,36 @@ export default function ImportPage() {
         
         if (fetchErr) throw new Error('Failed to load members: ' + fetchErr.message)
         
+        // Build two lookup maps: by fsftId and by name+year
+        const fsftMap = new Map<string, string>() // fsftId -> supabase id
         ;(allMembers ?? []).forEach((m: any) => {
-          // Index by multiple key formats to maximize matches
           const nameLower = m.name?.toLowerCase() ?? ''
           existingMap.set(`${nameLower}|${m.birth_year ?? ''}`, m.id)
-          existingMap.set(`${nameLower}|`, m.id) // fallback: name only
+          if (m.familysearch_id) fsftMap.set(m.familysearch_id, m.id)
         })
         
-        // Map GEDCOM IDs to Supabase IDs
+        // Match GEDCOM people to Supabase IDs — prefer FamilySearch ID match
         let matched = 0
+        const fsftUpdates: { id: string; fsftId: string }[] = []
         persons.forEach((p: any) => {
-          const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
-          const keyNameOnly = `${p.name.toLowerCase()}|`
-          const id = existingMap.get(key) ?? existingMap.get(keyNameOnly)
-          if (id) { idMap.set(p.id, id); matched++ }
+          let id = p.fsftId ? fsftMap.get(p.fsftId) : undefined
+          if (!id) {
+            const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
+            id = existingMap.get(key)
+          }
+          if (id) {
+            idMap.set(p.id, id)
+            matched++
+            // Queue familysearch_id update if not already set
+            if (p.fsftId && !fsftMap.has(p.fsftId)) {
+              fsftUpdates.push({ id, fsftId: p.fsftId })
+            }
+          }
         })
+        // Update familysearch_id on matched members so future imports use ID matching
+        for (const upd of fsftUpdates.slice(0, 500)) {
+          await supabase.from('members').update({ familysearch_id: upd.fsftId }).eq('id', upd.id)
+        }
         
         setProgress({ current: matched, total: persons.length, label: `Matched ${matched} of ${persons.length} people — building relationships…` })
       }
