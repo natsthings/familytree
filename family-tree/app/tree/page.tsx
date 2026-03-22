@@ -133,7 +133,7 @@ export default function TreePage() {
 
     const [{ data: membersData }, { data: relsData }, { data: myPositions }, { data: notesData }] = await Promise.all([
       supabase.from('members').select('*').eq('is_imported', false).order('name'),
-      supabase.from('relationships').select('*'),
+      supabase.from('relationships').select('*').eq('is_imported', false),
       supabase.from('member_positions').select('*').eq('user_id', userId),
       supabase.from('tree_notes').select('*'),
     ])
@@ -633,7 +633,7 @@ export default function TreePage() {
       const supabase = createClient()
       const [{ data: membersData }, { data: relsData }] = await Promise.all([
         supabase.from('members').select('*'),
-        supabase.from('relationships').select('*'),
+        supabase.from('relationships').select('*').eq('is_imported', false),
       ])
       if (membersData) {
         setMembers(membersData)
