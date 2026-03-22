@@ -12,6 +12,8 @@ interface MemberNodeData {
   onEdit: (member: Member) => void
   onConnect: (member: Member) => void
   onMessage: (member: Member) => void
+  isComplete: boolean
+  onToggleComplete: (memberId: string, complete: boolean) => void
 }
 
 const handleStyle = {
@@ -21,12 +23,13 @@ const handleStyle = {
 }
 
 function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
-  const { member, currentUserId, isAdmin, cardSize = 'normal', onEdit, onConnect, onMessage } = data
+  const { member, currentUserId, isAdmin, cardSize = 'normal', onEdit, onConnect, onMessage, isComplete = false, onToggleComplete } = data
   const isDeceased = !!member.death_year || !!member.death_date || !!member.is_deceased
   const isClaimed = !!member.claimed_by
   const isMyProfile = member.claimed_by === currentUserId
   const isPrivate = !!(member as any)._isPrivate
   const [copied, setCopied] = useState(false)
+  const [showUncheckConfirm, setShowUncheckConfirm] = useState(false)
 
   const isCompact = cardSize === 'compact'
   const isDetailed = cardSize === 'detailed'
@@ -188,6 +191,53 @@ function MemberNode({ data, selected }: NodeProps<MemberNodeData>) {
           </div>
         )}
       </div>
+
+      {/* Complete checkmark — top right */}
+      {showUncheckConfirm && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 28, right: 4, zIndex: 100,
+            background: '#1c1610', border: '1px solid #3a3020', borderRadius: 10,
+            padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            minWidth: 160, fontFamily: 'Lora, serif',
+          }}>
+          <div style={{ fontSize: 12, color: '#f5edd8', marginBottom: 10, lineHeight: 1.4 }}>
+            Unmark as complete?
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={e => { e.stopPropagation(); setShowUncheckConfirm(false) }}
+              style={{ flex: 1, padding: '5px', borderRadius: 6, border: '1px solid #3a3020', background: 'none', color: '#b8a882', cursor: 'pointer', fontSize: 11 }}>
+              Cancel
+            </button>
+            <button onClick={e => { e.stopPropagation(); onToggleComplete?.(member.id, false); setShowUncheckConfirm(false) }}
+              style={{ flex: 1, padding: '5px', borderRadius: 6, border: 'none', background: 'rgba(139,32,32,0.3)', color: '#f87171', cursor: 'pointer', fontSize: 11 }}>
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+      <button
+        onClick={e => {
+          e.stopPropagation()
+          if (!isComplete) {
+            onToggleComplete?.(member.id, true)
+          } else {
+            setShowUncheckConfirm(p => !p)
+          }
+        }}
+        title={isComplete ? 'Marked as complete' : 'Mark as fully entered'}
+        style={{
+          position: 'absolute', top: 6, right: 8,
+          width: 18, height: 18, borderRadius: '50%',
+          background: isComplete ? '#507040' : 'transparent',
+          border: `1.5px solid ${isComplete ? '#70a050' : '#3a3020'}`,
+          color: isComplete ? '#b0e080' : '#3a3020',
+          cursor: 'pointer', fontSize: 11, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.2s', padding: 0, lineHeight: 1,
+        }}
+      >{isComplete ? '✓' : ''}</button>
 
       {/* Message button */}
       {isClaimed && (
