@@ -177,19 +177,27 @@ export default function ImportPage() {
       } else {
         // Relationships-only mode: load ALL members (just id/name/birth_year) to build ID map
         setProgress({ current: 0, total: 0, label: 'Loading existing members to match…' })
-        const { data: allMembers, error: fetchErr } = await supabase
-          .from('members')
-          .select('id, name, birth_year')
-        
-        if (fetchErr) throw new Error('Failed to load members: ' + fetchErr.message)
-        
-        // Build two lookup maps: by fsftId and by name+year
-        const fsftMap = new Map<string, string>() // fsftId -> supabase id
-        ;(allMembers ?? []).forEach((m: any) => {
-          const nameLower = m.name?.toLowerCase() ?? ''
-          existingMap.set(`${nameLower}|${m.birth_year ?? ''}`, m.id)
-          if (m.familysearch_id) fsftMap.set(m.familysearch_id, m.id)
-        })
+        // Load all members in pages of 1000
+        const fsftMap = new Map<string, string>()
+        let offset = 0
+        let totalLoaded = 0
+        while (true) {
+          const { data: batch, error: fetchErr } = await supabase
+            .from('members')
+            .select('id, name, birth_year, familysearch_id')
+            .range(offset, offset + 999)
+          if (fetchErr) throw new Error('Failed to load members: ' + fetchErr.message)
+          if (!batch || batch.length === 0) break
+          batch.forEach((m: any) => {
+            existingMap.set(`${m.name?.toLowerCase() ?? ''}|${m.birth_year ?? ''}`, m.id)
+            if (m.familysearch_id) fsftMap.set(m.familysearch_id, m.id)
+          })
+          totalLoaded += batch.length
+          setProgress({ current: totalLoaded, total: 0, label: `Loading members… ${totalLoaded} loaded` })
+          if (batch.length < 1000) break
+          offset += 1000
+          await new Promise(r => setTimeout(r, 100))
+        }
         
         // Match GEDCOM people to Supabase IDs — prefer FamilySearch ID match
         let matched = 0
