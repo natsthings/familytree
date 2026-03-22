@@ -80,6 +80,7 @@ export default function TreePage() {
   const flowInstance = useRef<ReactFlowInstance | null>(null)
   const [cardSize, setCardSize] = useState<'compact' | 'normal' | 'detailed'>('normal')
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [completedMembers, setCompletedMembers] = useState<Set<string>>(new Set())
 
   // When cardSize changes, update all existing nodes' data immediately
   useEffect(() => {
@@ -145,6 +146,12 @@ export default function TreePage() {
 
     setMembers(allMembers)
     setTreeNotes(notesData ?? [])
+    // Load which members are marked complete
+    if (userId) {
+      const supabaseInner = createClient()
+      const { data: completeData } = await supabaseInner.from('member_complete').select('member_id').eq('user_id', userId)
+      setCompletedMembers(new Set((completeData ?? []).map((r: any) => r.member_id)))
+    }
     // Seed public pos cache from loaded positions so it starts current
     initialEdgesLoaded.current = false // allow full edge sync on reload
     setRelationships(relsData ?? [])
@@ -279,6 +286,8 @@ export default function TreePage() {
           onEdit: (member: Member) => setModal({ mode: 'edit', member }),
           onConnect: (member: Member) => setModal({ mode: 'connect', sourceForConnect: member }),
           onMessage: (m: Member) => { if (m.claimed_by) setMessageBox({ toUserId: m.claimed_by, toUserName: m.name }) },
+          isComplete: completedMembers.has(m.id),
+          onToggleComplete: handleToggleComplete,
         },
       }
     })
@@ -296,7 +305,7 @@ export default function TreePage() {
       },
     }))
     setNodes([...newNodes, ...noteNodes])
-  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote, cardSize])
+  }, [members, userId, isAdmin, privateMemberIds, privateMode, treeNotes, handleUpdateNote, handleDeleteNote, cardSize, completedMembers, handleToggleComplete])
 
   const builtEdges: Edge[] = useMemo(() => {
     const allRels = privateMode
@@ -559,6 +568,17 @@ export default function TreePage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [handleUndo])
+
+  const handleToggleComplete = useCallback(async (memberId: string, complete: boolean) => {
+    const supabase = createClient()
+    if (complete) {
+      await supabase.from('member_complete').upsert({ user_id: userId, member_id: memberId }, { onConflict: 'user_id,member_id' })
+      setCompletedMembers(prev => new Set([...Array.from(prev), memberId]))
+    } else {
+      await supabase.from('member_complete').delete().eq('user_id', userId).eq('member_id', memberId)
+      setCompletedMembers(prev => { const next = new Set(prev); next.delete(memberId); return next })
+    }
+  }, [userId])
 
   const handleSearch = (q: string) => {
     setSearchQuery(q)
