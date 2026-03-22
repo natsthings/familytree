@@ -200,11 +200,23 @@ export default function ImportPage() {
         const husbId = fam.husbandId ? idMap.get(fam.husbandId) : null
         const wifeId = fam.wifeId ? idMap.get(fam.wifeId) : null
         if (husbId && wifeId) relationships.push({ user_id: userId, source_id: husbId, target_id: wifeId, relation_type: 'spouse' })
+
+        // Collect all child supabase IDs for this family
+        const familyChildIds: string[] = []
         for (const childGedId of fam.childIds) {
           const childId = idMap.get(childGedId)
           if (!childId) continue
+          familyChildIds.push(childId)
           if (husbId) relationships.push({ user_id: userId, source_id: husbId, target_id: childId, relation_type: 'parent' })
           if (wifeId) relationships.push({ user_id: userId, source_id: wifeId, target_id: childId, relation_type: 'parent' })
+        }
+
+        // Auto-create sibling lines for all children in the same family
+        // GEDCOM doesn't store siblings explicitly — we infer from shared parents
+        for (let si = 0; si < familyChildIds.length; si++) {
+          for (let sj = si + 1; sj < familyChildIds.length; sj++) {
+            relationships.push({ user_id: userId, source_id: familyChildIds[si], target_id: familyChildIds[sj], relation_type: 'sibling' })
+          }
         }
       }
 
@@ -236,10 +248,26 @@ export default function ImportPage() {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#c49040', margin: 0 }}>Import GEDCOM</h1>
-            <p style={{ fontSize: 13, color: '#b8a882', margin: '4px 0 0', fontStyle: 'italic' }}>From FamilySearch via RootsMagic</p>
+            <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: '#c49040', margin: 0 }}>Import</h1>
+            <p style={{ fontSize: 13, color: '#b8a882', margin: '4px 0 0', fontStyle: 'italic' }}>Add people from FamilySearch</p>
           </div>
           <button onClick={() => router.push('/tree')} style={{ background: 'none', border: '1px solid #3a3020', borderRadius: 8, color: '#b8a882', padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>← Back</button>
+        </div>
+
+        {/* FamilySearch API option */}
+        <div onClick={() => router.push('/import/familysearch')}
+          style={{ background: 'rgba(80,112,144,0.1)', border: '1px solid rgba(80,112,144,0.3)', borderRadius: 12, padding: '16px 18px', marginBottom: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: '#8ab0d0', marginBottom: 4 }}>🔗 Import directly from FamilySearch</div>
+            <div style={{ fontSize: 12, color: '#b8a882', lineHeight: 1.5 }}>Connects via API — pulls everything including events, notes, biographies. No file needed. Recommended.</div>
+          </div>
+          <span style={{ color: '#8ab0d0', fontSize: 20, marginLeft: 12 }}>→</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ flex: 1, height: 1, background: '#3a3020' }} />
+          <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#6a6050', textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>or upload a GEDCOM file</span>
+          <div style={{ flex: 1, height: 1, background: '#3a3020' }} />
         </div>
 
         {(status === 'idle' || status === 'previewing') && (
