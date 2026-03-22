@@ -13,6 +13,7 @@ export interface Member {
   deathplace: string | null
   familysearch_id: string | null
   grave_location: string | null
+  source_links: { title: string; url: string }[] | null
   origins: string[] | null
   photo_url: string | null
   is_root: boolean
