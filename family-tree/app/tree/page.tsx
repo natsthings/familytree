@@ -79,6 +79,7 @@ export default function TreePage() {
   const [showSearchResults, setShowSearchResults] = useState(false)
   const flowInstance = useRef<ReactFlowInstance | null>(null)
   const [cardSize, setCardSize] = useState<'compact' | 'normal' | 'detailed'>('normal')
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const undoStack = useRef<Array<{
     type: 'delete_edge'
     rel: any
