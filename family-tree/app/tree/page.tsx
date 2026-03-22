@@ -774,6 +774,7 @@ export default function TreePage() {
           <button onClick={() => router.push('/timeline')} title="Timeline view" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             📅 Timeline
           </button>
+          {/* Show/hide imported button hidden — uncomment to re-enable
           <button onClick={async () => {
             if (!showImported) { await loadImportedMembers(); setShowImported(true) }
             else { 
@@ -784,6 +785,7 @@ export default function TreePage() {
           }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: showImported ? 'rgba(196,144,64,0.15)' : 'rgba(255,255,255,0.05)', color: showImported ? '#c49040' : '#b8a882', border: `1px solid ${showImported ? '#c49040' : '#3a3020'}`, borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             {showImported ? '🌳 Hide Imported' : '🌱 Show Imported'}
           </button>
+          */}
           <button onClick={() => router.push('/duplicates')} title="Find duplicates" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             🔍 Duplicates
           </button>
@@ -796,11 +798,13 @@ export default function TreePage() {
               </button>
             ))}
           </div>
+          {/* Import button hidden — uncomment to re-enable
           {isAdmin && (
             <button onClick={() => router.push('/import')} title="Import GEDCOM" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
               📥 Import
             </button>
           )}
+          */}
           <button onClick={() => setModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#c49040', color: '#1a1208', border: 'none', borderRadius: 8, padding: '7px 14px', fontFamily: 'Playfair Display, serif', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <Plus size={14} /> Add member
           </button>
