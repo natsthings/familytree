@@ -54,6 +54,8 @@ export default function MemberModal({
   const [deathplace, setDeathplace] = useState((member as any)?.deathplace ?? '')
   const [familySearchId, setFamilySearchId] = useState((member as any)?.familysearch_id ?? '')
   const [graveLocation, setGraveLocation] = useState((member as any)?.grave_location ?? '')
+  const [sourceLinks, setSourceLinks] = useState<{ title: string; url: string }[]>((member as any)?.source_links ?? [])
+  const [sourceLinkInput, setSourceLinkInput] = useState({ title: '', url: '' })
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(member?.social_links ?? [])
   const [photoUrl, setPhotoUrl] = useState(member?.photo_url ?? '')
   const [photoPreview, setPhotoPreview] = useState(member?.photo_url ?? '')
@@ -135,6 +137,7 @@ export default function MemberModal({
           p_deathplace: deathplace || null,
           p_familysearch_id: familySearchId || null,
           p_grave_location: graveLocation || null,
+          p_source_links: JSON.parse(JSON.stringify(sourceLinks)),
         })
         if (nameError) throw nameError
       } else if (mode === 'add') {
@@ -152,6 +155,7 @@ export default function MemberModal({
           deathplace: deathplace || null,
           familysearch_id: familySearchId || null,
           grave_location: graveLocation || null,
+          source_links: sourceLinks,
           social_links: socialLinks.filter(l => l.url.trim()),
           ...(privateMode ? {} : { is_root: false }),
           position_x: (() => { const v = document.querySelector('.react-flow__viewport') as HTMLElement; if (!v) return 0; const m = new DOMMatrix(getComputedStyle(v).transform); const c = v.closest('.react-flow') as HTMLElement; return (((c?.offsetWidth??800)/2) - m.e) / (m.a||1) })() + (Math.random() * 60 - 30),
