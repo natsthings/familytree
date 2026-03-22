@@ -103,6 +103,10 @@ export default function TimelinePage() {
   const [showEvents, setShowEvents] = useState(true)
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [hoveredEvent, setHoveredEvent] = useState<typeof WORLD_EVENTS[0] | null>(null)
+  const [customEvents, setCustomEvents] = useState<any[]>([])
+  const [showAddEvent, setShowAddEvent] = useState(false)
+  const [newEvent, setNewEvent] = useState({ title: '', year: '', description: '', category: 'personal', member_id: '' })
+  const [userId, setUserId] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const timelineRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
@@ -112,6 +116,11 @@ export default function TimelinePage() {
     createClient().auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.replace('/login'); return }
     })
+    createClient().auth.getSession().then(({ data: { session } }) => {
+      if (session) setUserId(session.user.id)
+    })
+    createClient().from('timeline_events').select('*').order('year')
+      .then(({ data }) => setCustomEvents(data ?? []))
     createClient().from('members')
       .select('id, name, birth_year, death_year, is_deceased, birthplace, photo_url')
       .then(({ data }) => {
@@ -176,6 +185,29 @@ export default function TimelinePage() {
     filterCategory === 'all' || e.category === filterCategory
   )
 
+  const saveCustomEvent = async () => {
+    if (!newEvent.title || !newEvent.year || !userId) return
+    const supabase = createClient()
+    const { data } = await supabase.from('timeline_events').insert({
+      user_id: userId,
+      title: newEvent.title,
+      year: parseInt(newEvent.year),
+      description: newEvent.description || null,
+      category: newEvent.category,
+      member_id: newEvent.member_id || null,
+    }).select().single()
+    if (data) {
+      setCustomEvents(prev => [...prev, data])
+      setNewEvent({ title: '', year: '', description: '', category: 'personal', member_id: '' })
+      setShowAddEvent(false)
+    }
+  }
+
+  const deleteCustomEvent = async (id: string) => {
+    await createClient().from('timeline_events').delete().eq('id', id)
+    setCustomEvents(prev => prev.filter(e => e.id !== id))
+  }
+
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0f0c08', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b8a882', fontFamily: 'Lora, serif' }}>
       Loading timeline…
@@ -203,6 +235,11 @@ export default function TimelinePage() {
             style={{ background: '#0f0c08', border: '1px solid #507090', borderRadius: 8, padding: '6px 10px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13, width: 140 }} />
         </div>
 
+        <button onClick={() => setShowAddEvent(p => !p)}
+          style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #c49040', background: showAddEvent ? 'rgba(196,144,64,0.15)' : 'none', color: '#c49040', cursor: 'pointer', fontSize: 13, fontFamily: 'Lora, serif' }}>
+          + Add Event
+        </button>
+
         {/* Event filters */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {['all', 'war', 'politics', 'science', 'religion', 'exploration', 'disaster', 'culture'].map(cat => (
@@ -228,6 +265,47 @@ export default function TimelinePage() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Add custom event panel */}
+      {showAddEvent && (
+        <div style={{ padding: '16px 24px', background: 'rgba(196,144,64,0.06)', borderBottom: '1px solid rgba(196,144,64,0.2)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div>
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', marginBottom: 4 }}>Event title</div>
+            <input value={newEvent.title} onChange={e => setNewEvent(p => ({ ...p, title: e.target.value }))}
+              placeholder="e.g. Family emigrated to Panama"
+              style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13, width: 220 }} />
+          </div>
+          <div>
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', marginBottom: 4 }}>Year</div>
+            <input type="number" value={newEvent.year} onChange={e => setNewEvent(p => ({ ...p, year: e.target.value }))}
+              placeholder="e.g. 1920"
+              style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13, width: 100 }} />
+          </div>
+          <div>
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', marginBottom: 4 }}>Category</div>
+            <select value={newEvent.category} onChange={e => setNewEvent(p => ({ ...p, category: e.target.value }))}
+              style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13 }}>
+              <option value="personal">Personal</option>
+              <option value="war">War</option>
+              <option value="politics">Politics</option>
+              <option value="science">Science</option>
+              <option value="religion">Religion</option>
+              <option value="culture">Culture</option>
+              <option value="disaster">Disaster</option>
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#b8a882', textTransform: 'uppercase', marginBottom: 4 }}>Description (optional)</div>
+            <input value={newEvent.description} onChange={e => setNewEvent(p => ({ ...p, description: e.target.value }))}
+              placeholder="Add context…"
+              style={{ background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13, width: '100%' }} />
+          </div>
+          <button onClick={saveCustomEvent}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#c49040', color: '#1a1208', cursor: 'pointer', fontSize: 13, fontFamily: 'Playfair Display, serif', fontWeight: 600 }}>
+            Save Event
+          </button>
         </div>
       )}
 
@@ -268,6 +346,22 @@ export default function TimelinePage() {
                 <div
                   style={{ position: 'absolute', top: 20, left: -4, width: 8, height: 8, borderRadius: '50%', background: color, cursor: 'pointer', pointerEvents: 'all', zIndex: 5 }}
                   onMouseEnter={e => { setHoveredEvent(event); setTooltipPos({ x: e.clientX, y: e.clientY }) }}
+                  onMouseLeave={() => setHoveredEvent(null)}
+                />
+              </div>
+            )
+          })}
+
+          {/* Custom events */}
+          {customEvents.map((event, i) => {
+            const x = yearToX(event.year)
+            const color = EVENT_COLORS[event.category] ?? '#c49040'
+            return (
+              <div key={event.id} style={{ position: 'absolute', left: x, top: 0, bottom: 0, pointerEvents: 'none' }}>
+                <div style={{ position: 'absolute', top: 28, left: 0, width: 1, height: 16, background: color, opacity: 0.9 }} />
+                <div
+                  style={{ position: 'absolute', top: 20, left: -6, width: 12, height: 12, borderRadius: '50%', background: color, border: '2px solid #0f0c08', cursor: 'pointer', pointerEvents: 'all', zIndex: 6 }}
+                  onMouseEnter={e => { setHoveredEvent({ year: event.year, label: event.title, category: event.category }); setTooltipPos({ x: e.clientX, y: e.clientY }) }}
                   onMouseLeave={() => setHoveredEvent(null)}
                 />
               </div>
