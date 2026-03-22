@@ -229,15 +229,24 @@ export default function ImportPage() {
         }
       }
 
-      for (let i = 0; i < relationships.length; i += CHUNK) {
-        const chunk = relationships.slice(i, i + CHUNK)
-        await supabase.from('relationships').upsert(chunk, { onConflict: 'source_id,target_id,relation_type', ignoreDuplicates: true })
-        setProgress(p => ({ ...p, current: toInsert.length + Math.min(i + CHUNK, relationships.length), total: toInsert.length + relationships.length }))
+      // Insert in small batches with retries to avoid rate limits
+      const REL_CHUNK = 20
+      let totalInserted = 0
+      for (let i = 0; i < relationships.length; i += REL_CHUNK) {
+        const chunk = relationships.slice(i, i + REL_CHUNK)
+        let retries = 3
+        while (retries > 0) {
+          const { error } = await supabase.from('relationships').upsert(chunk, { onConflict: 'source_id,target_id,relation_type', ignoreDuplicates: true })
+          if (!error) { totalInserted += chunk.length; break }
+          retries--
+          await new Promise(r => setTimeout(r, 1000))
+        }
+        setProgress({ current: i + REL_CHUNK, total: relationships.length, label: `Saving relationships… ${Math.min(i + REL_CHUNK, relationships.length).toLocaleString()} of ${relationships.length.toLocaleString()}` })
+        if (i % 200 === 0 && i > 0) await new Promise(r => setTimeout(r, 300))
       }
 
-      console.log('Total relationships built:', relationships.length)
       setStatus('done')
-      setProgress({ current: 0, total: 0, label: `Done! Matched ${idMap.size} people, built ${relationships.length} relationships.` })
+      setProgress({ current: 0, total: 0, label: `Done! Built ${totalInserted.toLocaleString()} relationships for ${idMap.size.toLocaleString()} matched people.` })
     } catch (e: any) {
       setError(e.message || 'Import failed')
       setStatus('error')
