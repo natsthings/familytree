@@ -192,6 +192,8 @@ export default function ImportPage() {
           const id = existingMap.get(key)
           if (id) idMap.set(p.id, id)
         })
+        console.log('ID map size:', idMap.size, 'of', persons.length)
+        console.log('Sample matches:', Array.from(idMap.entries()).slice(0, 5))
         setProgress({ current: idMap.size, total: persons.length, label: `Matched ${idMap.size} of ${persons.length} people — building relationships…` })
       }
 
@@ -229,8 +231,9 @@ export default function ImportPage() {
         setProgress(p => ({ ...p, current: toInsert.length + Math.min(i + CHUNK, relationships.length), total: toInsert.length + relationships.length }))
       }
 
+      console.log('Total relationships built:', relationships.length)
       setStatus('done')
-      setProgress({ current: 0, total: 0, label: `Done! Added ${toInsert.length} people and ${relationships.length} relationships. Run the Duplicate Detector to clean up any overlaps.` })
+      setProgress({ current: 0, total: 0, label: `Done! Matched ${idMap.size} people, built ${relationships.length} relationships.` })
     } catch (e: any) {
       setError(e.message || 'Import failed')
       setStatus('error')
