@@ -236,6 +236,17 @@ export default function TreePage() {
     if (data) setTreeNotes(prev => [...prev, data])
   }, [userId])
 
+  const handleToggleComplete = useCallback(async (memberId: string, complete: boolean) => {
+    const supabase = createClient()
+    if (complete) {
+      await supabase.from('member_complete').upsert({ user_id: userId, member_id: memberId }, { onConflict: 'user_id,member_id' })
+      setCompletedMembers(prev => new Set([...Array.from(prev), memberId]))
+    } else {
+      await supabase.from('member_complete').delete().eq('user_id', userId).eq('member_id', memberId)
+      setCompletedMembers(prev => { const next = new Set(prev); next.delete(memberId); return next })
+    }
+  }, [userId])
+
   const handleUpdateNote = useCallback(async (id: string, content: string) => {
     const supabase = createClient()
     setTreeNotes(prev => prev.map(n => n.id === id ? { ...n, content } : n))
@@ -569,16 +580,7 @@ export default function TreePage() {
     return () => window.removeEventListener('keydown', handler)
   }, [handleUndo])
 
-  const handleToggleComplete = useCallback(async (memberId: string, complete: boolean) => {
-    const supabase = createClient()
-    if (complete) {
-      await supabase.from('member_complete').upsert({ user_id: userId, member_id: memberId }, { onConflict: 'user_id,member_id' })
-      setCompletedMembers(prev => new Set([...Array.from(prev), memberId]))
-    } else {
-      await supabase.from('member_complete').delete().eq('user_id', userId).eq('member_id', memberId)
-      setCompletedMembers(prev => { const next = new Set(prev); next.delete(memberId); return next })
-    }
-  }, [userId])
+
 
   const handleSearch = (q: string) => {
     setSearchQuery(q)
