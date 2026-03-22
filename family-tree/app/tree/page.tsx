@@ -81,6 +81,7 @@ export default function TreePage() {
   const [cardSize, setCardSize] = useState<'compact' | 'normal' | 'detailed'>('normal')
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [completedMembers, setCompletedMembers] = useState<Set<string>>(new Set())
+  const [showImported, setShowImported] = useState(false)
 
   // When cardSize changes, update all existing nodes' data immediately
   useEffect(() => {
@@ -131,7 +132,7 @@ export default function TreePage() {
     const supabase = createClient()
 
     const [{ data: membersData }, { data: relsData }, { data: myPositions }, { data: notesData }] = await Promise.all([
-      supabase.from('members').select('*').order('name'),
+      supabase.from('members').select('*').eq('is_imported', false).order('name'),
       supabase.from('relationships').select('*'),
       supabase.from('member_positions').select('*').eq('user_id', userId),
       supabase.from('tree_notes').select('*'),
@@ -604,6 +605,17 @@ export default function TreePage() {
     router.replace('/login')
   }
 
+  const loadImportedMembers = async () => {
+    if (!userId) return
+    const supabase = createClient()
+    const { data } = await supabase.from('members').select('*').eq('is_imported', true).order('name')
+    if (data) setMembers(prev => {
+      const existingIds = new Set(prev.map(m => m.id))
+      const newOnes = data.filter((m: any) => !existingIds.has(m.id))
+      return [...prev, ...newOnes]
+    })
+  }
+
   async function handleModalSaved(deletedMemberId?: string) {
     setModal(null)
     setPendingConnect(null)
@@ -734,6 +746,12 @@ export default function TreePage() {
 
           <button onClick={() => router.push('/timeline')} title="Timeline view" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             📅 Timeline
+          </button>
+          <button onClick={async () => {
+            if (!showImported) { await loadImportedMembers(); setShowImported(true) }
+            else { setMembers(prev => prev.filter(m => !(m as any).is_imported)); setShowImported(false) }
+          }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: showImported ? 'rgba(196,144,64,0.15)' : 'rgba(255,255,255,0.05)', color: showImported ? '#c49040' : '#b8a882', border: `1px solid ${showImported ? '#c49040' : '#3a3020'}`, borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+            {showImported ? '🌳 Hide Imported' : '🌱 Show Imported'}
           </button>
           <button onClick={() => router.push('/duplicates')} title="Find duplicates" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             🔍 Duplicates
