@@ -101,7 +101,12 @@ export default function DuplicatesPage() {
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState<string | null>(null)
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('dismissed_duplicates')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch { return new Set() }
+  })
 
   useEffect(() => {
     createClient().auth.getSession().then(({ data: { session } }) => {
@@ -139,7 +144,11 @@ export default function DuplicatesPage() {
 
   const dismiss = (group: DuplicateGroup) => {
     const key = group.members.map(m => m.id).sort().join(',')
-    setDismissed(prev => new Set([...Array.from(prev), key]))
+    setDismissed(prev => {
+      const next = new Set([...Array.from(prev), key])
+      try { localStorage.setItem('dismissed_duplicates', JSON.stringify(Array.from(next))) } catch {}
+      return next
+    })
   }
 
   const inp = { background: '#0f0c08', border: '1px solid #3a3020', borderRadius: 8, padding: '8px 12px', color: '#f5edd8', fontFamily: 'Lora, serif', fontSize: 13 }
