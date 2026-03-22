@@ -1,5 +1,6 @@
 export interface GedcomPerson {
   id: string           // GEDCOM @I123@ id
+  fsftId: string | null  // FamilySearch ID e.g. LRRV-5QY
   name: string
   sex: string | null
   birthYear: number | null
@@ -75,7 +76,7 @@ export function parseGedcom(text: string): GedcomData {
     if (level === 0 && tag.startsWith('@') && value === 'INDI') {
       // Parse individual
       const person: GedcomPerson = {
-        id: tag, name: '', sex: null,
+        id: tag, fsftId: null, name: '', sex: null,
         birthYear: null, birthDate: null, birthPlace: null,
         deathYear: null, deathDate: null, deathPlace: null,
         isDeceased: false, notes: []
@@ -89,7 +90,9 @@ export function parseGedcom(text: string): GedcomData {
         if (lv === 0) break
         const lt = lm[2]; const lval = lm[3].trim()
 
-        if (lv === 1 && lt === 'NAME') {
+        if (lv === 1 && lt === '_FSFTID') {
+          person.fsftId = lval.trim()
+        } else if (lv === 1 && lt === 'NAME') {
           person.name = lval.replace(/\//g, '').replace(/\s+/g, ' ').trim()
         } else if (lv === 1 && lt === 'SEX') {
           person.sex = lval
