@@ -201,26 +201,15 @@ export default function ImportPage() {
         
         // Match GEDCOM people to Supabase IDs — prefer FamilySearch ID match
         let matched = 0
-        const fsftUpdates: { id: string; fsftId: string }[] = []
         persons.forEach((p: any) => {
           let id = p.fsftId ? fsftMap.get(p.fsftId) : undefined
           if (!id) {
             const key = `${p.name.toLowerCase()}|${p.birthYear ?? ''}`
             id = existingMap.get(key)
           }
-          if (id) {
-            idMap.set(p.id, id)
-            matched++
-            // Queue familysearch_id update if not already set
-            if (p.fsftId && !fsftMap.has(p.fsftId)) {
-              fsftUpdates.push({ id, fsftId: p.fsftId })
-            }
-          }
+          if (id) { idMap.set(p.id, id); matched++ }
         })
-        // Update familysearch_id on matched members so future imports use ID matching
-        for (const upd of fsftUpdates.slice(0, 500)) {
-          await supabase.from('members').update({ familysearch_id: upd.fsftId }).eq('id', upd.id)
-        }
+        // Skip individual familysearch_id updates to avoid timeout
         
         setProgress({ current: matched, total: persons.length, label: `Matched ${matched} of ${persons.length} people — building relationships…` })
       }
