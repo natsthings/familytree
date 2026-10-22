@@ -33,6 +33,20 @@ function useDebouncedCallback<T extends (...args: Parameters<T>) => void>(fn: T,
   }, [fn, delay])
 }
 
+// Supabase returns max 1000 rows per request — page through so no saved position is silently dropped
+async function fetchAllRows(supabase: any, table: string, userId: string) {
+  const rows: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from(table).select('*').eq('user_id', userId).range(from, from + 999)
+    if (error || !data) break
+    rows.push(...data)
+    if (data.length < 1000) break
+    from += 1000
+  }
+  return rows
+}
+
 const nodeTypes = { memberNode: MemberNode, stickyNote: StickyNoteNode }
 
 function edgeStyle(relType: string) {
@@ -58,8 +72,16 @@ export default function TreePage() {
   const [privateNotes, setPrivateNotes] = useState<Record<string, string>>({})
   const [privateRelationships, setPrivateRelationships] = useState<Relationship[]>([])
   const [treeNotes, setTreeNotes] = useState<any[]>([])
+  const treeNotesRef = useRef<any[]>([])
+  useEffect(() => { treeNotesRef.current = treeNotes }, [treeNotes])
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
+  // Single source of truth for every member's position (public + private).
+  // Seeded on load, updated on drag end, and read whenever nodes are rebuilt.
   const privatePosCache = useRef<Record<string, { x: number; y: number }>>({})
+  // Positions moved since the last successful save (only these get saved)
+  const pendingMoves = useRef<Record<string, { x: number; y: number }>>({})
+  const privateIdsRef = useRef<Set<string>>(new Set())
+  const userIdRef = useRef<string | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [nodes, setNodes] = useState<Node[]>([])
@@ -134,13 +156,18 @@ export default function TreePage() {
     const [{ data: membersData }, { data: relsData }, { data: myPositions }, { data: notesData }] = await Promise.all([
       supabase.from('members').select('*').eq('is_imported', false).order('name'),
       supabase.from('relationships').select('*').eq('is_imported', false),
-      supabase.from('member_positions').select('*').eq('user_id', userId),
+      fetchAllRows(supabase, 'member_positions', userId).then(data => ({ data })),
       supabase.from('tree_notes').select('*'),
     ])
 
+    const posById = new Map<string, any>((myPositions ?? []).map((p: any) => [p.member_id, p]))
     const allMembers = (membersData ?? []).map((m: any) => {
-      const myPos = myPositions?.find((p: any) => p.member_id === m.id)
+      const myPos = posById.get(m.id)
       return myPos ? { ...m, position_x: myPos.position_x, position_y: myPos.position_y } : m
+    })
+    // Seed the position cache so later rebuilds never fall back to master positions
+    allMembers.forEach((m: any) => {
+      privatePosCache.current[m.id] = { x: m.position_x ?? 0, y: m.position_y ?? 0 }
     })
 
 
@@ -171,17 +198,19 @@ export default function TreePage() {
       if (privateMembersData && privateMembersData.length > 0) {
         const privateIds = new Set(privateMembersData.map((m: any) => m.id as string))
         setPrivateMemberIds(privateIds)
+        privateIdsRef.current = privateIds
         // Load saved positions for private members
-        const { data: privatePosData } = await supabase
-          .from('private_member_positions')
-          .select('*')
-          .eq('user_id', userId)
+        const privatePosData = await fetchAllRows(supabase, 'private_member_positions', userId)
         setMembers(prev => {
           const existingIds = new Set(prev.map(m => m.id))
           const newPrivate = privateMembersData
             .filter((m: any) => !existingIds.has(m.id))
             .map((m: any) => {
               const savedPos = privatePosData?.find((p: any) => p.member_id === m.id)
+              privatePosCache.current[m.id] = {
+                x: savedPos ? savedPos.position_x : m.position_x ?? 0,
+                y: savedPos ? savedPos.position_y : m.position_y ?? 0,
+              }
               return {
                 ...m,
                 position_x: savedPos ? savedPos.position_x : m.position_x,
@@ -200,6 +229,8 @@ export default function TreePage() {
     setLoading(false)
   }
 
+  useEffect(() => { userIdRef.current = userId }, [userId])
+  useEffect(() => { privateIdsRef.current = privateMemberIds }, [privateMemberIds])
   useEffect(() => { if (userId) loadData() }, [userId])
 
   useEffect(() => {
@@ -283,9 +314,7 @@ export default function TreePage() {
     )
 
     const newNodes: Node[] = visibleMembers.map((m) => {
-      const pos = privateMemberIds.has(m.id)
-        ? (privatePosCache.current[m.id] ?? { x: m.position_x, y: m.position_y })
-        : { x: m.position_x, y: m.position_y }
+      const pos = privatePosCache.current[m.id] ?? { x: m.position_x ?? 0, y: m.position_y ?? 0 }
       return {
         id: m.id,
         type: 'memberNode',
@@ -375,72 +404,81 @@ export default function TreePage() {
     })
   }, [builtEdges])
 
-  // Position saving — everyone saves their own view to member_positions
-  // Admin additionally updates the master positions on members table
-  const savePositions = useDebouncedCallback(
-    async (updatedNodes: Node[]) => {
-      if (!userId) return
-      setSaveStatus('saving')
-      const supabase = createClient()
-      const privateNodes = updatedNodes.filter(n => privateMemberIds.has(n.id) && n.type !== 'stickyNote')
-      const publicNodes = updatedNodes.filter(n => !privateMemberIds.has(n.id) && n.type !== 'stickyNote')
-      // Save private member positions to private_member_positions
-      if (privateNodes.length > 0) {
-        await Promise.all(privateNodes.map(n =>
-          supabase.from('private_member_positions').upsert({
-            user_id: userId,
-            member_id: n.id,
-            position_x: n.position.x,
-            position_y: n.position.y,
-          }, { onConflict: 'user_id,member_id' })
-        ))
-      }
-      // Save public member positions to member_positions
-      if (publicNodes.length > 0) {
-        await Promise.all(publicNodes.map((n) =>
-          supabase.from('member_positions').upsert({
-            user_id: userId,
-            member_id: n.id,
-            position_x: n.position.x,
-            position_y: n.position.y,
-          }, { onConflict: 'user_id,member_id' })
-        ))
-        // Master positions no longer used — layout is computed from relationships
-      }
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 2000)
-    }, 1200
-  )
+  // Save ONLY the nodes that were actually moved, in batches (not every node every time)
+  const flushPositions = useCallback(async () => {
+    const uid = userIdRef.current
+    const moves = pendingMoves.current
+    const ids = Object.keys(moves)
+    if (!uid || ids.length === 0) return
+    pendingMoves.current = {}
+    setSaveStatus('saving')
+    const supabase = createClient()
+    const privRows: any[] = []
+    const pubRows: any[] = []
+    ids.forEach(id => {
+      const row = { user_id: uid, member_id: id, position_x: moves[id].x, position_y: moves[id].y }
+      ;(privateIdsRef.current.has(id) ? privRows : pubRows).push(row)
+    })
+    const results = await Promise.all([
+      privRows.length ? supabase.from('private_member_positions').upsert(privRows, { onConflict: 'user_id,member_id' }) : null,
+      pubRows.length ? supabase.from('member_positions').upsert(pubRows, { onConflict: 'user_id,member_id' }) : null,
+    ])
+    const failed = results.find(r => r && (r as any).error)
+    if (failed) {
+      console.error('Saving positions failed:', (failed as any).error)
+      // put them back so the next save retries (don't overwrite newer moves)
+      ids.forEach(id => { if (!pendingMoves.current[id]) pendingMoves.current[id] = moves[id] })
+      setSaveStatus('idle')
+      return
+    }
+    setSaveStatus('saved')
+    setTimeout(() => setSaveStatus('idle'), 2000)
+  }, [])
+
+  const savePositions = useDebouncedCallback(flushPositions, 600)
+
+  // Don't lose a pending save if the user refreshes / closes the tab quickly
+  useEffect(() => {
+    const flushNow = () => { flushPositions() }
+    const onHide = () => { if (document.visibilityState === 'hidden') flushNow() }
+    window.addEventListener('pagehide', flushNow)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('pagehide', flushNow)
+      document.removeEventListener('visibilitychange', onHide)
+      flushNow()
+    }
+  }, [flushPositions])
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((nds) => {
-      const updated = applyNodeChanges(changes, nds)
-      const hasMoved = changes.some((c) => c.type === 'position' && c.dragging === false)
-      if (hasMoved) {
-        // Cache positions for all members so re-renders don't reset them
-        updated.forEach(n => {
-          if (n.type !== 'stickyNote') {
-            if (privateMemberIds.has(n.id)) {
-              privatePosCache.current[n.id] = { x: n.position.x, y: n.position.y }
-            } else {
-            }
-          }
-        })
-        savePositions(updated)
-        // Save sticky note positions and update treeNotes state so rebuild doesn't reset them
-        const movedNotes = updated.filter(n => n.type === 'stickyNote' &&
-          changes.some(c => c.type === 'position' && c.id === n.id && (c as any).dragging === false))
-        if (movedNotes.length > 0) {
-          movedNotes.forEach(n => handleNotePositionSave(n.id, n.position.x, n.position.y))
-          setTreeNotes(prev => prev.map(note => {
-            const moved = movedNotes.find(n => n.id === note.id)
-            return moved ? { ...note, position_x: moved.position.x, position_y: moved.position.y } : note
-          }))
-        }
+    setNodes((nds) => applyNodeChanges(changes, nds))
+
+    // Drag finished: remember new positions for the moved nodes only
+    const dropped = changes.filter((c): c is NodeChange & { type: 'position'; id: string; position?: { x: number; y: number }; dragging?: boolean } =>
+      c.type === 'position' && (c as any).dragging === false && !!(c as any).position)
+    if (dropped.length === 0) return
+
+    const movedNotes: { id: string; x: number; y: number }[] = []
+    let movedMember = false
+    dropped.forEach(c => {
+      const pos = c.position!
+      if (treeNotesRef.current.some(n => n.id === c.id)) {
+        movedNotes.push({ id: c.id, x: pos.x, y: pos.y })
+      } else {
+        privatePosCache.current[c.id] = { x: pos.x, y: pos.y }
+        pendingMoves.current[c.id] = { x: pos.x, y: pos.y }
+        movedMember = true
       }
-      return updated
     })
-  }, [savePositions, privateMemberIds, handleNotePositionSave])
+    if (movedMember) savePositions()
+    if (movedNotes.length > 0) {
+      movedNotes.forEach(n => handleNotePositionSave(n.id, n.x, n.y))
+      setTreeNotes(prev => prev.map(note => {
+        const moved = movedNotes.find(n => n.id === note.id)
+        return moved ? { ...note, position_x: moved.x, position_y: moved.y } : note
+      }))
+    }
+  }, [savePositions, handleNotePositionSave])
 
   const pendingDeletes = useRef<Set<string>>(new Set())
 
@@ -663,7 +701,17 @@ export default function TreePage() {
         supabase.from('relationships').select('*').eq('is_imported', false),
       ])
       if (membersData) {
-        setMembers(membersData)
+        setMembers(prev => {
+          const fresh = new Map<string, any>(membersData.map((m: any) => [m.id, m]))
+          const kept = prev.map(p => {
+            const f = fresh.get(p.id)
+            if (!f) return p // private / imported members aren't in this query — keep them
+            const pos = privatePosCache.current[p.id]
+            return { ...f, position_x: pos?.x ?? p.position_x, position_y: pos?.y ?? p.position_y }
+          })
+          const prevIds = new Set(prev.map(p => p.id))
+          return [...kept, ...membersData.filter((m: any) => !prevIds.has(m.id))]
+        })
       }
       if (relsData) setRelationships(relsData.filter((r: any) => !pendingDeletes.current.has(r.id)))
     }
@@ -814,8 +862,11 @@ export default function TreePage() {
           <button onClick={async () => {
             if (!confirm('Reset your layout to the default view?')) return
             const supabase = createClient()
-            await supabase.rpc('reset_user_positions', { p_user_id: userId })
-            loadData()
+            pendingMoves.current = {}
+            privatePosCache.current = {}
+            const { error } = await supabase.rpc('reset_user_positions', { p_user_id: userId })
+            if (error) { alert('Could not reset layout: ' + error.message); return }
+            await loadData()
           }} title="Reset layout to default" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
             ↺
           </button>
