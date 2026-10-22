@@ -72,8 +72,6 @@ export default function TreePage() {
   const [privateNotes, setPrivateNotes] = useState<Record<string, string>>({})
   const [privateRelationships, setPrivateRelationships] = useState<Relationship[]>([])
   const [treeNotes, setTreeNotes] = useState<any[]>([])
-  const treeNotesRef = useRef<any[]>([])
-  useEffect(() => { treeNotesRef.current = treeNotes }, [treeNotes])
   const [privateMemberIds, setPrivateMemberIds] = useState<Set<string>>(new Set())
   // Single source of truth for every member's position (public + private).
   // Seeded on load, updated on drag end, and read whenever nodes are rebuilt.
@@ -450,23 +448,33 @@ export default function TreePage() {
     }
   }, [flushPositions])
 
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((nds) => applyNodeChanges(changes, nds))
+  // Always-current copy of nodes (React Flow's drag-end event carries NO position,
+  // so we read the final position from the nodes themselves)
+  const nodesRef = useRef<Node[]>([])
+  useEffect(() => { nodesRef.current = nodes }, [nodes])
 
-    // Drag finished: remember new positions for the moved nodes only
-    const dropped = changes.filter((c): c is NodeChange & { type: 'position'; id: string; position?: { x: number; y: number }; dragging?: boolean } =>
-      c.type === 'position' && (c as any).dragging === false && !!(c as any).position)
-    if (dropped.length === 0) return
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    const next = applyNodeChanges(changes, nodesRef.current)
+    nodesRef.current = next
+    setNodes(next)
+
+    // Drag finished (dragging === false): record final positions of moved nodes only
+    const droppedIds = changes
+      .filter(c => c.type === 'position' && (c as any).dragging === false)
+      .map(c => (c as any).id as string)
+    if (droppedIds.length === 0) return
 
     const movedNotes: { id: string; x: number; y: number }[] = []
     let movedMember = false
-    dropped.forEach(c => {
-      const pos = c.position!
-      if (treeNotesRef.current.some(n => n.id === c.id)) {
-        movedNotes.push({ id: c.id, x: pos.x, y: pos.y })
+    droppedIds.forEach(id => {
+      const node = next.find(n => n.id === id)
+      if (!node) return
+      const { x, y } = node.position
+      if (node.type === 'stickyNote') {
+        movedNotes.push({ id, x, y })
       } else {
-        privatePosCache.current[c.id] = { x: pos.x, y: pos.y }
-        pendingMoves.current[c.id] = { x: pos.x, y: pos.y }
+        privatePosCache.current[id] = { x, y }
+        pendingMoves.current[id] = { x, y }
         movedMember = true
       }
     })
