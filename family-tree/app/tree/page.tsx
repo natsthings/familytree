@@ -830,6 +830,9 @@ export default function TreePage() {
           <button onClick={() => router.push('/timeline')} title="Timeline view" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
             📅 Timeline
           </button>
+          <button onClick={() => router.push('/map')} title="Family map" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#b8a882', border: '1px solid #3a3020', borderRadius: 8, padding: '7px 12px', fontFamily: 'Lora, serif', fontSize: 13, cursor: 'pointer' }}>
+            🗺️ Map
+          </button>
           {/* Show/hide imported button hidden — uncomment to re-enable
           <button onClick={async () => {
             if (!showImported) { await loadImportedMembers(); setShowImported(true) }
