@@ -15,6 +15,7 @@ interface PlaceRecord {
   name: string
   kind: Kind
   place: string          // the text exactly as stored on the person
+  year: number | null    // birth year (born/living) or death year (buried) — drives the time slider
   note?: string          // e.g. "burial not recorded"
 }
 
@@ -25,6 +26,26 @@ const KIND_META: Record<Kind, { color: string; icon: string; verb: string; toggl
 }
 const ALL_COLOR = '#c49040'
 const CACHE_KEY = 'roots_geocode_v1'
+const THIS_YEAR = new Date().getFullYear()
+const yearOf = (year: any, date: any): number | null => {
+  if (typeof year === 'number' && year > 0) return year
+  const m = String(date ?? '').match(/\b(1\d{3}|20\d{2})\b/)
+  return m ? parseInt(m[1], 10) : null
+}
+// A curved arc between two points (looks like a flight path, and keeps overlapping lines readable)
+function arcPoints(a: [number, number], b: [number, number]): [number, number][] {
+  let lng2 = b[1]
+  if (lng2 - a[1] > 180) lng2 -= 360
+  if (lng2 - a[1] < -180) lng2 += 360
+  const dx = lng2 - a[1], dy = b[0] - a[0]
+  const cx = (a[1] + lng2) / 2 - dy * 0.2, cy = (a[0] + b[0]) / 2 + dx * 0.2
+  const pts: [number, number][] = []
+  for (let i = 0; i <= 28; i++) {
+    const t = i / 28, u = 1 - t
+    pts.push([u * u * a[0] + 2 * u * t * cy + t * t * b[0], u * u * a[1] + 2 * u * t * cx + t * t * lng2])
+  }
+  return pts
+}
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
@@ -72,6 +93,12 @@ export default function MapPage() {
   const [geoVersion, setGeoVersion] = useState(0)
   const [pending, setPending] = useState(0)
   const [showUnresolved, setShowUnresolved] = useState(false)
+  const [year, setYear] = useState(THIS_YEAR)
+  const [playing, setPlaying] = useState(false)
+  const [hideUndated, setHideUndated] = useState(false)
+  const [showLines, setShowLines] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const lineRef = useRef<any>(null)
 
   const mapEl = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -95,7 +122,7 @@ export default function MapPage() {
       let from = 0
       while (true) {
         const { data, error } = await supabase.from('members')
-          .select('id,name,death_year,death_date,is_deceased,birthplace,deathplace,grave_location,social_links')
+          .select('id,name,birth_year,birth_date,death_year,death_date,is_deceased,birthplace,deathplace,grave_location,social_links,photo_url,biography')
           .range(from, from + 999)
         if (error || !data) break
         all.push(...data)
@@ -115,28 +142,46 @@ export default function MapPage() {
     for (const m of members) {
       const deceased = !!(m.is_deceased || m.death_year || m.death_date)
       const birth = (m.birthplace ?? '').trim()
-      if (birth) out.push({ memberId: m.id, name: m.name, kind: 'born', place: birth })
+      const by = yearOf(m.birth_year, m.birth_date)
+      const dy = yearOf(m.death_year, m.death_date)
+      if (birth) out.push({ memberId: m.id, name: m.name, kind: 'born', place: birth, year: by })
 
       if (deceased) {
         const grave = (m.grave_location ?? '').trim()
         const death = (m.deathplace ?? '').trim()
-        if (grave) out.push({ memberId: m.id, name: m.name, kind: 'buried', place: grave })
-        else if (useDeathPlace && death) out.push({ memberId: m.id, name: m.name, kind: 'buried', place: death, note: 'Place of death — burial not recorded' })
+        if (grave) out.push({ memberId: m.id, name: m.name, kind: 'buried', place: grave, year: dy })
+        else if (useDeathPlace && death) out.push({ memberId: m.id, name: m.name, kind: 'buried', place: death, year: dy, note: 'Place of death — burial not recorded' })
       } else {
         const addr = (m.social_links ?? []).find((l: any) => l?.type === 'address' && (l.url ?? '').trim())
-        if (addr) out.push({ memberId: m.id, name: m.name, kind: 'living', place: addr.url.trim() })
+        if (addr) out.push({ memberId: m.id, name: m.name, kind: 'living', place: addr.url.trim(), year: by })
       }
     }
     return out
   }, [members, useDeathPlace])
 
-  const activeRecords = useMemo(() => records.filter(r => layer === 'all' || r.kind === layer), [records, layer])
+  const membersById = useMemo(() => new Map<string, any>(members.map(m => [m.id, m])), [members])
+  const minYear = useMemo(() => {
+    const ys = records.map(r => r.year).filter((y): y is number => y != null)
+    return ys.length ? Math.floor(Math.min(...ys) / 10) * 10 : 1800
+  }, [records])
+
+  // everything in the chosen toggle (used for looking places up, so scrubbing the slider never waits on a lookup)
+  const layerRecords = useMemo(() => records.filter(r => layer === 'all' || r.kind === layer), [records, layer])
+  // ...and only the ones that exist yet as of the slider's year
+  const inYear = (r: PlaceRecord) => (r.year == null ? !hideUndated : r.year <= year)
+  const activeRecords = useMemo(() => layerRecords.filter(inYear),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layerRecords, year, hideUndated])
+  // records that need a geocode: the toggle's pins, plus birth/burial ends when lines are on
+  const needRecords = useMemo(() => showLines
+    ? [...layerRecords, ...records.filter(r => r.kind !== 'living' && !(layer === 'all' || r.kind === layer))]
+    : layerRecords, [layerRecords, records, showLines, layer])
 
   // ---------- geocoding queue (1 request/second, cached in this browser) ----------
   useEffect(() => {
     const needed: string[] = []
     const seen = new Set<string>()
-    for (const r of activeRecords) {
+    for (const r of needRecords) {
       const k = norm(r.place)
       if (!seen.has(k) && !(k in cacheRef.current)) { seen.add(k); needed.push(r.place) }
     }
@@ -159,7 +204,21 @@ export default function MapPage() {
       }
       runningRef.current = false
     })()
-  }, [activeRecords])
+  }, [needRecords])
+
+  // ---------- play the slider ----------
+  useEffect(() => {
+    if (!playing) return
+    const step = Math.max(1, Math.round((THIS_YEAR - minYear) / 110))
+    const t = setInterval(() => {
+      setYear(y => {
+        const n = y + step
+        if (n >= THIS_YEAR) { setPlaying(false); return THIS_YEAR }
+        return n
+      })
+    }, 140)
+    return () => clearInterval(t)
+  }, [playing, minYear])
 
   // ---------- create the map once ----------
   useEffect(() => {
@@ -227,6 +286,7 @@ export default function MapPage() {
          </div>`,
         { direction: 'top', className: 'roots-tip', opacity: 1 },
       )
+      marker.on('click', () => setSelectedId(r.memberId))
       group.addLayer(marker)
     }
     map.addLayer(group)
@@ -239,6 +299,50 @@ export default function MapPage() {
       lastFitKey.current = fitKey
     }
   }, [placed, mapReady, layer, useDeathPlace])
+
+  // ---------- birth → burial lines ----------
+  const linePairs = useMemo(() => {
+    if (!showLines) return []
+    const by = new Map<string, { born?: PlaceRecord; buried?: PlaceRecord }>()
+    for (const r of records) {
+      if (r.kind === 'living') continue
+      const e = by.get(r.memberId) ?? {}
+      e[r.kind as 'born' | 'buried'] = r
+      by.set(r.memberId, e)
+    }
+    const out: { id: string; name: string; born: PlaceRecord; buried: PlaceRecord; a: GeoHit; b: GeoHit }[] = []
+    by.forEach((e, id) => {
+      if (!e.born || !e.buried || !inYear(e.born) || !inYear(e.buried)) return
+      const a = cacheRef.current[norm(e.born.place)], b = cacheRef.current[norm(e.buried.place)]
+      if (!a || !b) return
+      if (Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lng - b.lng) < 0.01) return   // same place: nothing to draw
+      out.push({ id, name: e.born.name, born: e.born, buried: e.buried, a, b })
+    })
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLines, records, geoVersion, year, hideUndated])
+
+  useEffect(() => {
+    const L = LRef.current, map = mapRef.current
+    if (!mapReady || !L || !map) return
+    if (lineRef.current) { map.removeLayer(lineRef.current); lineRef.current = null }
+    if (linePairs.length === 0) return
+    const g = L.layerGroup()
+    for (const p of linePairs) {
+      const line = L.polyline(arcPoints([p.a.lat, p.a.lng], [p.b.lat, p.b.lng]), { color: ALL_COLOR, weight: 1.8, opacity: 0.7, dashArray: '5 6' })
+      line.bindTooltip(
+        `<div style="font-family:Lora,serif"><div style="font-weight:700;color:${ALL_COLOR}">${esc(p.name)}</div>
+         <div style="font-size:12px;margin-top:2px">${KIND_META.born.icon} ${esc(p.born.place)}</div>
+         <div style="font-size:12px">${KIND_META.buried.icon} ${esc(p.buried.place)}</div></div>`,
+        { sticky: true, className: 'roots-tip', opacity: 1 })
+      line.on('click', () => setSelectedId(p.id))
+      g.addLayer(line)
+      g.addLayer(L.circleMarker([p.a.lat, p.a.lng], { radius: 4, color: '#0f0c08', weight: 1, fillColor: KIND_META.born.color, fillOpacity: 1, interactive: false }))
+      g.addLayer(L.circleMarker([p.b.lat, p.b.lng], { radius: 4, color: '#0f0c08', weight: 1, fillColor: KIND_META.buried.color, fillOpacity: 1, interactive: false }))
+    }
+    g.addTo(map)
+    lineRef.current = g
+  }, [linePairs, mapReady])
 
   // ---------- numbers for the legend ----------
   const stats = useMemo(() => {
@@ -287,15 +391,86 @@ export default function MapPage() {
             </button>
           )
         })}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b8a882', marginLeft: 'auto', cursor: 'pointer' }}>
-          <input type="checkbox" checked={useDeathPlace} onChange={e => setUseDeathPlace(e.target.checked)} />
-          Use place of death when burial isn’t recorded
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b8a882', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showLines} onChange={e => setShowLines(e.target.checked)} />
+            Lines: birth → burial
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b8a882', cursor: 'pointer' }}>
+            <input type="checkbox" checked={useDeathPlace} onChange={e => setUseDeathPlace(e.target.checked)} />
+            Use place of death when burial isn’t recorded
+          </label>
+        </div>
       </div>
 
       {/* map */}
       <div style={{ position: 'relative', flex: 1 }}>
         <div ref={mapEl} style={{ position: 'absolute', inset: 0 }} />
+
+        {/* year slider */}
+        <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 24, zIndex: 1000, width: 'min(520px, 42vw)', minWidth: 300, background: 'rgba(28,22,16,0.94)', border: '1px solid #3a3020', borderRadius: 12, padding: '10px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => { if (!playing && year >= THIS_YEAR) setYear(minYear); setPlaying(p => !p) }}
+              title={playing ? 'Pause' : 'Play through time'}
+              style={{ ...btn, padding: '5px 12px', background: 'rgba(196,144,64,0.15)', color: '#e0b060', borderColor: '#c49040' }}>
+              {playing ? '⏸' : '▶'}
+            </button>
+            <input type="range" min={minYear} max={THIS_YEAR} value={year}
+              onChange={e => { setPlaying(false); setYear(parseInt(e.target.value, 10)) }}
+              style={{ flex: 1, accentColor: '#c49040' }} />
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 15, color: '#e0b060', minWidth: 54, textAlign: 'right' }}>
+              {year >= THIS_YEAR ? 'Today' : year}
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: '#7a6e55' }}>
+            <span>{placed.length} pin{placed.length === 1 ? '' : 's'} as of {year >= THIS_YEAR ? 'today' : year}</span>
+            <label style={{ cursor: 'pointer' }}>
+              <input type="checkbox" checked={hideUndated} onChange={e => setHideUndated(e.target.checked)} style={{ marginRight: 4 }} />
+              hide people with no date
+            </label>
+          </div>
+        </div>
+
+        {/* person card (opens when a pin or line is clicked) */}
+        {selectedId && membersById.get(selectedId) && (() => {
+          const m = membersById.get(selectedId)
+          const deceased = !!(m.is_deceased || m.death_year || m.death_date)
+          const addr = (m.social_links ?? []).find((l: any) => l?.type === 'address' && (l.url ?? '').trim())
+          const rows: [string, string][] = []
+          if (m.birthplace) rows.push([`${KIND_META.born.icon} Born`, m.birthplace])
+          if (deceased && m.deathplace) rows.push(['✝ Died', m.deathplace])
+          if (deceased && m.grave_location) rows.push([`${KIND_META.buried.icon} Buried`, m.grave_location])
+          if (!deceased && addr) rows.push([`${KIND_META.living.icon} Lives`, addr.url])
+          const bio = (m.biography ?? '').trim()
+          return (
+            <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1100, width: 300, maxHeight: '52vh', overflow: 'auto', background: 'rgba(28,22,16,0.97)', border: '1px solid #c49040', borderRadius: 12, padding: 16, color: '#e8d9b8', boxShadow: '0 8px 30px rgba(0,0,0,.6)' }}>
+              <button onClick={() => setSelectedId(null)} style={{ position: 'absolute', top: 8, right: 10, background: 'none', border: 'none', color: '#b8a882', fontSize: 18, cursor: 'pointer' }}>×</button>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                {m.photo_url
+                  ? <img src={m.photo_url} alt={m.name} style={{ width: 54, height: 54, borderRadius: '50%', objectFit: 'cover', border: '2px solid #c49040' }} />
+                  : <div style={{ width: 54, height: 54, borderRadius: '50%', background: '#3a3020', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>👤</div>}
+                <div>
+                  <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 17, fontWeight: 700 }}>{m.name}</div>
+                  <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#b8a882', marginTop: 3 }}>
+                    b. {m.birth_date || m.birth_year || '—'}{deceased ? ` · d. ${m.death_date || m.death_year || '—'}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.5 }}>
+                {rows.map(([k, v], i) => (
+                  <div key={i} style={{ marginBottom: 4 }}><span style={{ color: '#b8a882' }}>{k}:</span> {v}</div>
+                ))}
+                {rows.length === 0 && <div style={{ color: '#7a6e55' }}>No places recorded.</div>}
+              </div>
+              {bio && <div style={{ marginTop: 8, fontSize: 12, color: '#b8a882', fontStyle: 'italic' }}>{bio.length > 220 ? bio.slice(0, 220) + '…' : bio}</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button onClick={() => router.push(`/tree?focus=${selectedId}`)} style={{ ...btn, flex: 1, background: '#c49040', color: '#0f0c08', fontWeight: 600 }}>🌳 Show in tree</button>
+                <button onClick={() => router.push(`/scrapbook/${selectedId}`)} style={{ ...btn, flex: 1, background: 'rgba(255,255,255,0.05)', color: '#e8d9b8' }}>📖 Scrapbook</button>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* legend */}
         <div style={{ position: 'absolute', left: 12, bottom: 24, zIndex: 1000, background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#e8d9b8', minWidth: 190 }}>
@@ -315,7 +490,7 @@ export default function MapPage() {
             {loading ? 'Loading family…' : `Finding locations… ${pending} left (saved in this browser, so this only happens once)`}
           </div>
         )}
-        {!loading && !pending && placed.length === 0 && (
+        {!loading && !pending && placed.length === 0 && !playing && year >= THIS_YEAR && (
           <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 1000, background: 'rgba(28,22,16,0.95)', border: '1px solid #3a3020', borderRadius: 12, padding: '16px 22px', color: '#b8a882', fontSize: 14, textAlign: 'center', maxWidth: 360 }}>
             No pins for this view yet.<br />
             <span style={{ fontSize: 12 }}>Add a birthplace, a burial location (grave), or an “Address” contact link to a person, and they’ll appear here.</span>
@@ -324,7 +499,7 @@ export default function MapPage() {
 
         {/* places that couldn't be found */}
         {unresolved.length > 0 && (
-          <div style={{ position: 'absolute', right: 12, bottom: 24, zIndex: 1000, background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: '#e8d9b8', maxWidth: 320, maxHeight: '45vh', overflow: 'auto' }}>
+          <div style={{ position: 'absolute', right: 12, bottom: 24, zIndex: 1000, background: 'rgba(28,22,16,0.92)', border: '1px solid #3a3020', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: '#e8d9b8', maxWidth: 320, maxHeight: '30vh', overflow: 'auto' }}>
             <div onClick={() => setShowUnresolved(s => !s)} style={{ cursor: 'pointer', color: '#e0b060' }}>
               ⚠️ {unresolved.length} place{unresolved.length === 1 ? '' : 's'} couldn’t be found {showUnresolved ? '▾' : '▸'}
             </div>
