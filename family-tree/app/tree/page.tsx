@@ -645,6 +645,23 @@ export default function TreePage() {
     setShowSearchResults(false)
   }
 
+  // /tree?focus=<memberId> (used by the map's "Show in tree" button) centers on that person
+  const focusDone = useRef(false)
+  useEffect(() => {
+    if (focusDone.current || nodes.length === 0) return
+    const id = new URLSearchParams(window.location.search).get('focus')
+    if (!id) { focusDone.current = true; return }
+    const node = nodes.find(n => n.id === id)
+    if (!node) return
+    const t = setTimeout(() => {
+      if (!flowInstance.current) return
+      flowInstance.current.setCenter(node.position.x + 110, node.position.y + 75, { zoom: 1, duration: 600 })
+      focusDone.current = true
+      window.history.replaceState(null, '', '/tree')
+    }, 500)
+    return () => clearTimeout(t)
+  }, [nodes])
+
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
