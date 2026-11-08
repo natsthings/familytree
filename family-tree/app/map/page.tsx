@@ -230,9 +230,9 @@ export default function MapPage() {
       if (cancelled || !mapEl.current || mapRef.current) return
       LRef.current = L
       const map = L.map(mapEl.current, { worldCopyJump: true, minZoom: 2 }).setView([25, 0], 2)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd', maxZoom: 19,
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
       }).addTo(map)
       mapRef.current = map
       setMapReady(true)
@@ -376,6 +376,7 @@ export default function MapPage() {
         .roots-tip { background:#1c1610 !important; color:#e8d9b8 !important; border:1px solid #3a3020 !important; border-radius:8px !important; padding:8px 10px !important; box-shadow:0 4px 14px rgba(0,0,0,.6) !important; max-width:300px; white-space:normal !important; }
         .roots-tip:before { border-top-color:#3a3020 !important; }
         .leaflet-container { background:#0f0c08; font-family:Lora,serif; }
+        .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.6); }
       `}</style>
 
       {/* top bar */}
