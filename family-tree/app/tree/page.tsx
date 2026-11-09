@@ -928,8 +928,10 @@ export default function TreePage() {
           onMoveEnd={(_, viewport) => {
             sessionStorage.setItem('tree_viewport', JSON.stringify(viewport))
           }}
+        minZoom={0.005}
+        maxZoom={20}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
+        fitViewOptions={{ padding: 0.3, minZoom: 0.005, maxZoom: 1.5 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
         connectionLineStyle={{ stroke: '#c49040', strokeWidth: 1.5 }}
